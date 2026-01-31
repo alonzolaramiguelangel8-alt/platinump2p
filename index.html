@@ -19,17 +19,32 @@
         .msg-line { margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 0.9em; }
         .msg-me { background: var(--gold); color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
         .msg-other { background: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
-        .notif-flash { border: 2px solid var(--gold) !important; box-shadow: 0 0 15px var(--gold); }
+        .notif-flash { border: 2px solid var(--gold) !important; box-shadow: 0 0 20px var(--gold) !important; transform: scale(1.02); }
     </style>
 </head>
 <body>
     <div id="login-screen" class="container">
-        <div class="card" style="margin-top: 100px; text-align: center;">
+        <div class="card" style="margin-top: 80px; text-align: center;">
             <h1 style="color:var(--gold); margin-bottom:5px;">PLATINUM</h1>
             <p style="font-size:0.7em; letter-spacing:3px; margin-bottom:30px;">ELITE P2P NETWORK</p>
-            <input type="text" id="user_in" placeholder="Usuario">
-            <input type="password" id="pass_in" placeholder="Contraseña">
-            <button onclick="auth()">INICIAR SESIÓN</button>
+            
+            <div id="auth-box">
+                <input type="text" id="user_in" placeholder="Usuario">
+                <input type="password" id="pass_in" placeholder="Contraseña">
+                <button onclick="auth()">INICIAR SESIÓN</button>
+                <p style="font-size: 0.8em; margin-top: 15px; color: #888;">
+                    ¿No tienes cuenta? <a href="#" onclick="toggleAuth(true)" style="color:var(--gold)">Regístrate</a>
+                </p>
+            </div>
+
+            <div id="reg-box" class="hidden">
+                <input type="text" id="reg_user" placeholder="Nuevo Usuario">
+                <input type="password" id="reg_pass" placeholder="Nueva Contraseña">
+                <button onclick="register()" style="background: #fff;">CREAR CUENTA</button>
+                <p style="font-size: 0.8em; margin-top: 15px; color: #888;">
+                    ¿Ya tienes cuenta? <a href="#" onclick="toggleAuth(false)" style="color:var(--gold)">Inicia Sesión</a>
+                </p>
+            </div>
         </div>
     </div>
 
@@ -39,7 +54,7 @@
             <b onclick="verTab('historial')">HISTORIAL</b>
             <b onclick="verTab('perfil')">PERFIL</b>
         </div>
-        
+
         <div class="container">
             <div style="text-align: right; margin-bottom: 15px;">
                 <small style="color:var(--gold)">Balance: <b id="display-saldo"></b> USDT</small>
@@ -89,22 +104,38 @@
     let me = null;
     let ordenIdActual = null;
 
+    function toggleAuth(showReg) {
+        document.getElementById('auth-box').classList.toggle('hidden', showReg);
+        document.getElementById('reg-box').classList.toggle('hidden', !showReg);
+    }
+
     async function auth() {
         const res = await fetch('/login', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ usuario: user_in.value, clave: pass_in.value })
+            body: JSON.stringify({ username: user_in.value, password: pass_in.value })
         });
-        if (res.ok) {
-            me = await res.json();
+        const data = await res.json();
+        if (data.success) {
+            me = data.user;
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('main-screen').classList.remove('hidden');
-            document.getElementById('display-saldo').innerText = me.balance_usdt;
+            document.getElementById('display-saldo').innerText = me.balance_usdt || 0;
             document.getElementById('prof-user').innerText = me.username;
-            document.getElementById('prof-kyc').innerText = "KYC: " + me.kyc_status;
+            document.getElementById('prof-kyc').innerText = "KYC: " + (me.kyc_status || 'Pendiente');
             document.getElementById('avatar').innerText = me.username[0].toUpperCase();
             cargarOrdenes();
-        } else { alert("Error de acceso"); }
+        } else { alert(data.message || "Error de acceso"); }
+    }
+
+    async function register() {
+        const res = await fetch('/registro', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ username: reg_user.value, password: reg_pass.value })
+        });
+        if(res.ok) { alert("Usuario creado. Ya puedes iniciar sesión."); toggleAuth(false); }
+        else { alert("Error al registrar"); }
     }
 
     async function cargarOrdenes(historial = false) {
@@ -115,7 +146,7 @@
             <div class="card" style="border-left: 4px solid ${o.estatus === 'FINALIZADA' ? 'gray' : 'var(--gold)'}">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <small>Vendedor: ${o.vendedor_id}</small><br>
+                        <small>Orden ID: ${o.id}</small><br>
                         <b>${o.monto_usdt} USDT</b> → <b style="color:var(--gold)">${o.monto_bs} Bs</b>
                     </div>
                     ${o.estatus === 'ABIERTA' ? `<button style="width:auto; padding:5px 15px;" onclick="abrirChat(${o.id})">COMPRAR</button>` : `<small>${o.estatus}</small>`}
@@ -146,11 +177,10 @@
         const clase = data.user === me.username ? 'msg-me' : 'msg-other';
         box.innerHTML += `<div class="msg-line ${clase}"><b>${data.user}:</b> ${data.msg}</div>`;
         box.scrollTop = box.scrollHeight;
-        
-        // EFECTO VISUAL DE NOTIFICACIÓN
+
         if(data.user !== me.username) {
             card.classList.add('notif-flash');
-            setTimeout(() => card.classList.remove('notif-flash'), 1000);
+            setTimeout(() => card.classList.remove('notif-flash'), 800);
         }
     });
 
@@ -176,13 +206,10 @@
         const res = await fetch('/liberar-fondos', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ ordenId: ordenIdActual, vendedorId: me.id, compradorId: me.id, monto: 1 }) // Simplificado para prueba
+            body: JSON.stringify({ ordenId: ordenIdActual, vendedorId: me.id, compradorId: me.id, monto: 1 })
         });
-        if(res.ok) location.reload();
+        if(res.ok) { alert("¡Fondos liberados!"); location.reload(); }
     }
-
-    socket.on('nuevo_anuncio', () => { if(!document.getElementById('tab-mercado').classList.contains('hidden')) cargarOrdenes(); });
 </script>
 </body>
 </html>
- 
