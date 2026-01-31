@@ -1,210 +1,157 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Platinum Elite P2P</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <style>
-        :root { --gold: #d4af37; --dark: #0a0a0a; --card: #151515; }
-        body { background: var(--dark); color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; overflow-x: hidden; }
-        .container { max-width: 600px; margin: auto; padding: 15px; }
-        .card { background: var(--card); border: 1px solid #222; padding: 15px; border-radius: 15px; margin-bottom: 15px; transition: 0.3s; }
-        .nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
-        .nav b { cursor: pointer; font-size: 0.8em; letter-spacing: 1px; }
-        .hidden { display: none; }
-        button { background: linear-gradient(45deg, #d4af37, #f2d06b); border: none; padding: 12px; cursor: pointer; font-weight: bold; border-radius: 8px; width: 100%; color: #000; }
-        input { background: #111; color: #fff; border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 10px; width: 95%; }
-        #chat-box { height: 300px; overflow-y: auto; background: #050505; padding: 15px; border-radius: 10px; border: 1px solid #222; display: flex; flex-direction: column; }
-        .msg-line { margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 0.9em; }
-        .msg-me { background: var(--gold); color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
-        .msg-other { background: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
-        .notif-flash { border: 2px solid var(--gold) !important; box-shadow: 0 0 20px var(--gold) !important; transform: scale(1.02); }
-    </style>
-</head>
-<body>
-    <div id="login-screen" class="container">
-        <div class="card" style="margin-top: 80px; text-align: center;">
-            <h1 style="color:var(--gold); margin-bottom:5px;">PLATINUM</h1>
-            <p style="font-size:0.7em; letter-spacing:3px; margin-bottom:30px;">ELITE P2P NETWORK</p>
-            <div id="auth-box">
-                <input type="text" id="user_in" placeholder="Usuario">
-                <input type="password" id="pass_in" placeholder="Contraseña">
-                <button onclick="auth()">INICIAR SESIÓN</button>
-                <p style="font-size: 0.8em; margin-top: 15px; color: #888;">
-                    ¿No tienes cuenta? <a href="#" onclick="toggleAuth(true)" style="color:var(--gold)">Regístrate</a>
-                </p>
-            </div>
-            <div id="reg-box" class="hidden">
-                <input type="text" id="reg_user" placeholder="Nuevo Usuario">
-                <input type="email" id="reg_email" placeholder="Correo Electrónico">
-                <input type="password" id="reg_pass" placeholder="Nueva Contraseña">
-                <button onclick="register()" style="background: #fff;">CREAR CUENTA</button>
-                <p style="font-size: 0.8em; margin-top: 15px; color: #888;">
-                    ¿Ya tienes cuenta? <a href="#" onclick="toggleAuth(false)" style="color:var(--gold)">Inicia Sesión</a>
-                </p>
-            </div>
-        </div>
-    </div>
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+const { Pool } = require('pg');
 
-    <div id="main-screen" class="hidden">
-        <div class="nav">
-            <b onclick="verTab('mercado')">MERCADO</b>
-            <b onclick="verTab('historial')">HISTORIAL</b>
-            <b onclick="verTab('perfil')">PERFIL</b>
-        </div>
-        <div class="container">
-            <div style="text-align: right; margin-bottom: 15px;">
-                <small style="color:var(--gold)">Balance: <b id="display-saldo"></b> USDT</small>
-            </div>
-            <div id="tab-mercado">
-                <div class="card">
-                    <h4 style="margin:0 0 10px 0;">NUEVA VENTA</h4>
-                    <input type="number" id="v-monto" placeholder="Cantidad USDT">
-                    <input type="number" id="v-precio" placeholder="Precio Total Bs">
-                    <button onclick="crearOrden()">PUBLICAR ANUNCIO</button>
-                </div>
-                <div id="lista-ordenes"></div>
-            </div>
-            <div id="tab-historial" class="hidden">
-                <h4 style="color:var(--gold)">ÚLTIMAS OPERACIONES</h4>
-                <div id="lista-historial"></div>
-            </div>
-            <div id="tab-perfil" class="hidden">
-                <div class="card" style="text-align: center;">
-                    <div style="width:60px; height:60px; background:var(--gold); border-radius:50%; margin:auto; display:flex; align-items:center; justify-content:center; color:#000; font-weight:bold; font-size:1.5em;" id="avatar">U</div>
-                    <h2 id="prof-user"></h2>
-                    <p id="prof-kyc" style="font-size:0.8em;"></p>
-                    <button style="background:#222; color:var(--gold); border:1px solid var(--gold)" onclick="location.reload()">CERRAR SESIÓN</button>
-                </div>
-            </div>
-            <div id="chat-p2p" class="card hidden">
-                <div id="chat-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                    <b>ORDEN #<span id="orden-activa"></span></b>
-                    <b onclick="verTab('mercado')" style="color:red; cursor:pointer;">X</b>
-                </div>
-                <div id="chat-box"></div>
-                <div style="display:flex; gap:5px; margin-top:10px;">
-                    <input type="text" id="msg-input" placeholder="Escribe mensaje..." style="flex:1; margin:0;">
-                    <button onclick="enviarMsg()" style="width:auto;">></button>
-                </div>
-                <button id="btn-liberar" onclick="confirmarLiberacion()" style="background:green; color:white; margin-top:10px;">YA RECIBÍ EL PAGO (LIBERAR)</button>
-            </div>
-        </div>
-    </div>
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-    <script>
-        const socket = io();
-        let me = null;
-        let ordenIdActual = null;
-        let datosOrdenActual = null;
+// MIDDLEWARES
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
 
-        function toggleAuth(showReg) {
-            document.getElementById('auth-box').classList.toggle('hidden', showReg);
-            document.getElementById('reg-box').classList.toggle('hidden', !showReg);
+// CONEXIÓN A BASE DE DATOS
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
+
+// --- 1. INICIALIZACIÓN DE TABLAS (REINICIO LIMPIO) ---
+const initDB = async () => {
+    try {
+        // Borramos para actualizar estructura si es necesario
+        await pool.query('DROP TABLE IF EXISTS ordenes CASCADE;');
+        await pool.query('DROP TABLE IF EXISTS users CASCADE;');
+
+        // Tabla de Usuarios
+        await pool.query(`
+            CREATE TABLE users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                balance_usdt DECIMAL DEFAULT 0,
+                is_admin BOOLEAN DEFAULT false,
+                kyc_status TEXT DEFAULT 'verificado'
+            );
+        `);
+
+        // Tabla de Mercado P2P
+        await pool.query(`
+            CREATE TABLE ordenes (
+                id SERIAL PRIMARY KEY,
+                vendedor_id INTEGER REFERENCES users(id),
+                comprador_id INTEGER REFERENCES users(id),
+                monto_usdt DECIMAL NOT NULL,
+                monto_bs DECIMAL NOT NULL,
+                estatus TEXT DEFAULT 'ABIERTA',
+                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("✅ PLATINUM DB: Todo el sistema (Usuarios y Mercado) está listo.");
+    } catch (err) {
+        console.error("❌ Error DB:", err.message);
+    }
+};
+initDB();
+
+// --- 2. RUTAS DE ACCESO Y ADMIN ---
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/admin-power-up', async (req, res) => {
+    try {
+        const miEmail = 'alonzolaramiguelangel@gmail.com';
+        const query = `
+            UPDATE users 
+            SET balance_usdt = 10000, is_admin = true, kyc_status = 'verificado' 
+            WHERE email = $1 OR username = $1 
+            RETURNING *`;
+        const result = await pool.query(query, [miEmail]);
+        if (result.rowCount > 0) {
+            res.send("<div style='text-align:center;padding:50px;font-family:sans-serif;'><h1>✅ ACCESO NIVEL DIOS ACTIVADO</h1><p>Usuario: " + miEmail + " actualizado.</p><a href='/'>VOLVER AL MERCADO</a></div>");
+        } else {
+            res.send("<h1>⚠️ Error: Usuario no encontrado. Regístrate primero en la app.</h1>");
         }
+    } catch (err) { res.status(500).send(err.message); }
+});
 
-        async function auth() {
-            const res = await fetch('/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ username: user_in.value, password: pass_in.value })
-            });
-            const data = await res.json();
-            if (data.success) {
-                me = data.user;
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('main-screen').classList.remove('hidden');
-                document.getElementById('display-saldo').innerText = me.balance_usdt || 0;
-                document.getElementById('prof-user').innerText = me.username;
-                document.getElementById('prof-kyc').innerText = "KYC: " + (me.kyc_status || 'Pendiente');
-                document.getElementById('avatar').innerText = me.username[0].toUpperCase();
-                cargarOrdenes();
-            } else { alert(data.message || "Error de acceso"); }
+app.post('/registro', async (req, res) => {
+    const { username, email, password } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO users (username, email, password, balance_usdt) VALUES ($1, $2, $3, 0)', 
+            [username, email, password]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, error: "Usuario o correo ya existe." });
+    }
+});
+
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        const r = await pool.query('SELECT * FROM users WHERE (username = $1 OR email = $1) AND password = $2', [username, password]);
+        if (r.rows.length > 0) res.json({ success: true, user: r.rows[0] });
+        else res.status(401).json({ success: false, message: "Credenciales inválidas" });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- 3. RUTAS DEL MERCADO P2P ---
+
+app.get('/api/mercado', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT o.*, u.username 
+            FROM ordenes o 
+            JOIN users u ON o.vendedor_id = u.id 
+            WHERE o.estatus = 'ABIERTA' 
+            ORDER BY o.fecha_creacion DESC
+        `);
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/crear-orden', async (req, res) => {
+    const { seller_id, amount, price } = req.body;
+    try {
+        const user = await pool.query('SELECT balance_usdt FROM users WHERE id = $1', [seller_id]);
+        if (parseFloat(user.rows[0].balance_usdt) < parseFloat(amount)) {
+            return res.status(400).json({ error: "Saldo insuficiente" });
         }
+        await pool.query('UPDATE users SET balance_usdt = balance_usdt - $1 WHERE id = $2', [amount, seller_id]);
+        await pool.query(
+            'INSERT INTO ordenes (vendedor_id, monto_usdt, monto_bs, estatus) VALUES ($1, $2, $3, $4)',
+            [seller_id, amount, price, 'ABIERTA']
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
-        async function register() {
-            const res = await fetch('/registro', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ username: reg_user.value, email: reg_email.value, password: reg_pass.value })
-            });
-            if(res.ok) { alert("Usuario creado exitosamente."); toggleAuth(false); }
-            else { alert("Error al registrar."); }
-        }
+app.post('/liberar-fondos', async (req, res) => {
+    const { ordenId, compradorId, monto } = req.body;
+    try {
+        await pool.query('UPDATE users SET balance_usdt = balance_usdt + $1 WHERE id = $2', [monto, compradorId]);
+        await pool.query("UPDATE ordenes SET estatus = 'FINALIZADA' WHERE id = $1", [ordenId]);
+        io.to("orden_" + ordenId).emit('finalizado');
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
-        async function cargarOrdenes(historial = false) {
-            const res = await fetch('/api/mercado');
-            const data = await res.json();
-            const html = data.map(o => `
-                <div class="card" style="border-left: 4px solid ${o.estatus === 'FINALIZADA' ? 'gray' : 'var(--gold)'}">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <small>ID: ${o.id} | Vendedor: ${o.username}</small><br>
-                            <b>${o.monto_usdt} USDT</b> → <b style="color:var(--gold)">${o.monto_bs} Bs</b>
-                        </div>
-                        ${o.estatus === 'ABIERTA' ? `<button style="width:auto; padding:5px 15px;" onclick="abrirChat(${o.id}, ${o.vendedor_id}, ${o.monto_usdt})">COMPRAR</button>` : `<small>${o.estatus}</small>`}
-                    </div>
-                </div>`).join('');
-            document.getElementById(historial ? 'lista-historial' : 'lista-ordenes').innerHTML = html;
-        }
+// --- 4. SOCKETS (CHAT EN VIVO) ---
+io.on('connection', (socket) => {
+    socket.on('unirse_p2p', (id) => socket.join("orden_" + id));
+    socket.on('msg_p2p', (data) => {
+        io.to("orden_" + data.ordenId).emit('update_chat', data);
+    });
+});
 
-        function abrirChat(id, vendedorId, monto) {
-            ordenIdActual = id;
-            datosOrdenActual = { id, vendedorId, monto };
-            document.getElementById('chat-p2p').classList.remove('hidden');
-            document.getElementById('tab-mercado').classList.add('hidden');
-            document.getElementById('orden-activa').innerText = id;
-            document.getElementById('chat-box').innerHTML = "Cargando chat...";
-            document.getElementById('btn-liberar').style.display = (me.id === vendedorId) ? 'block' : 'none';
-            socket.emit('unirse_p2p', id);
-        }
-
-        function enviarMsg() {
-            const txt = document.getElementById('msg-input').value;
-            if(!txt) return;
-            socket.emit('msg_p2p', { ordenId: ordenIdActual, user: me.username, msg: txt });
-            document.getElementById('msg-input').value = "";
-        }
-
-        socket.on('historial_chat', (msgs) => {
-            const box = document.getElementById('chat-box');
-            box.innerHTML = msgs.map(m => `<div class="msg-line ${m.enviado_por === me.username ? 'msg-me' : 'msg-other'}"><b>${m.enviado_por}:</b> ${m.texto}</div>`).join('');
-            box.scrollTop = box.scrollHeight;
-        });
-
-        socket.on('update_chat', (data) => {
-            const box = document.getElementById('chat-box');
-            box.innerHTML += `<div class="msg-line ${data.user === me.username ? 'msg-me' : 'msg-other'}"><b>${data.user}:</b> ${data.msg}</div>`;
-            box.scrollTop = box.scrollHeight;
-        });
-
-        function verTab(t) {
-            document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
-            document.getElementById('tab-' + t).classList.remove('hidden');
-            if(t === 'mercado' || t === 'historial') cargarOrdenes(t === 'historial');
-            document.getElementById('chat-p2p').classList.add('hidden');
-        }
-
-        async function crearOrden() {
-            const res = await fetch('/crear-orden', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ seller_id: me.id, amount: v_monto.value, price: v_precio.value, tipo: 'VENTA' })
-            });
-            if(res.ok) { alert("Anuncio publicado"); verTab('mercado'); }
-            else { alert("Error: Revisa tu saldo"); }
-        }
-
-        async function confirmarLiberacion() {
-            if(!confirm("¿Confirmas recibir el pago?")) return;
-            const res = await fetch('/liberar-fondos', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ ordenId: ordenIdActual, vendedorId: me.id, compradorId: me.id, monto: datosOrdenActual.monto })
-            });
-            if(res.ok) { alert("¡Éxito!"); location.reload(); }
-        }
-    </script>
-</body>
-</html>
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 PLATINUM SERVER LIVE ON PORT ${PORT}`));
