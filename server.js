@@ -143,20 +143,35 @@ io.on('connection', (socket) => {
 });
 app.get('/admin-power-up', async (req, res) => {
     try {
+        // 1. Crear la tabla de usuarios por si no existe
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE,
+                email TEXT UNIQUE,
+                password TEXT,
+                saldo_usdt DECIMAL DEFAULT 0,
+                is_admin BOOLEAN DEFAULT false,
+                verificado BOOLEAN DEFAULT false,
+                fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 2. Intentar darte los poderes
         const miEmail = 'alonzolaramiguelangel@gmail.com';
-        const query = 'UPDATE usuarios SET saldo_usdt = 10000, is_admin = true, verificado = true WHERE email = $1';
-        const result = await pool.query(query, [miEmail]);
+        const result = await pool.query(
+            'UPDATE usuarios SET saldo_usdt = 10000, is_admin = true, verificado = true WHERE email = $1',
+            [miEmail]
+        );
         
         if (result.rowCount > 0) {
-            res.send(`<h1>✅ ¡Éxito! El usuario ${miEmail} ahora tiene 10,000 USDT y es Admin.</h1><a href="/">Volver al Inicio</a>`);
+            res.send(`<h1>✅ ¡TABLA CREADA Y PODER ACTIVADO!</h1><p>El usuario ${miEmail} ya es Admin con 10,000 USDT.</p>`);
         } else {
-            res.send(`<h1>⚠️ Error: El correo ${miEmail} no existe en la base de datos.</h1><p>Regístrate primero en la web y luego vuelve a este link.</p>`);
+            res.send(`<h1>📦 Tabla creada con éxito</h1><p>Pero el usuario ${miEmail} aún no existe. <b>Regístrate ahora en la web</b> y luego vuelve a este link.</p>`);
         }
     } catch (err) {
-        res.status(500).send("Error en la base de datos: " + err.message);
+        res.status(500).send("Error crítico: " + err.message);
     }
-});
-// --- HASTA AQUÍ ---
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
