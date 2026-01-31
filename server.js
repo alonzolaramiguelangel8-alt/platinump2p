@@ -90,9 +90,16 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 app.post('/registro', async (req, res) => {
     const { username, email, password } = req.body;
     try {
-        await pool.query('INSERT INTO users (username, email, password) VALUES ($1, $2, $3)', [username, email, password]);
+        // Le asignamos 0 balance inicial para que la DB no proteste
+        await pool.query(
+            'INSERT INTO users (username, email, password, balance_usdt) VALUES ($1, $2, $3, 0)', 
+            [username, email, password]
+        );
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: "El usuario o correo ya existe." }); }
+    } catch (err) { 
+        console.error("DETALLE DEL ERROR:", err); // Esto es para que lo veas en Render
+        res.status(500).json({ error: "El usuario ya existe o error de base de datos." }); 
+    }
 });
 
 app.post('/login', async (req, res) => {
