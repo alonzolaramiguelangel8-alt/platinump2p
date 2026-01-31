@@ -2,163 +2,209 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Platinum Elite P2P</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background: #0a0a0a; color: #f39c12; font-family: sans-serif; margin: 0; }
-        .container { max-width: 800px; margin: auto; padding: 20px; }
-        .card { background: #111; border: 1px solid #333; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
-        input { background: #222; color: white; border: 1px solid #444; padding: 10px; border-radius: 4px; margin: 5px; }
-        button { background: #f39c12; color: black; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; border-radius: 4px; }
-        #chat-box { height: 200px; overflow-y: auto; background: black; border: 1px solid #333; padding: 15px; margin: 10px 0; color: #0f0; text-align: left; font-family: monospace; }
+        :root { --gold: #d4af37; --dark: #0a0a0a; --card: #151515; }
+        body { background: var(--dark); color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; overflow-x: hidden; }
+        .container { max-width: 600px; margin: auto; padding: 15px; }
+        .card { background: var(--card); border: 1px solid #222; padding: 15px; border-radius: 15px; margin-bottom: 15px; transition: 0.3s; }
+        .nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
+        .nav b { cursor: pointer; font-size: 0.8em; letter-spacing: 1px; }
         .hidden { display: none; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border-bottom: 1px solid #222; padding: 12px; text-align: center; color: white; }
-        th { color: #f39c12; }
+        button { background: linear-gradient(45deg, #d4af37, #f2d06b); border: none; padding: 12px; cursor: pointer; font-weight: bold; border-radius: 8px; width: 100%; color: #000; }
+        input { background: #111; color: #fff; border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 10px; width: 95%; }
+        #chat-box { height: 300px; overflow-y: auto; background: #050505; padding: 15px; border-radius: 10px; border: 1px solid #222; display: flex; flex-direction: column; }
+        .msg-line { margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 0.9em; }
+        .msg-me { background: var(--gold); color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .msg-other { background: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .notif-flash { border: 2px solid var(--gold) !important; box-shadow: 0 0 20px var(--gold) !important; transform: scale(1.02); }
     </style>
 </head>
 <body>
     <div id="login-screen" class="container">
-        <div class="card">
-            <h2>PLATINUM ACCESS</h2>
-            <input type="text" id="user_in" placeholder="Usuario" style="width: 200px;">
-            <input type="password" id="pass_in" placeholder="Contraseña" style="width: 200px;">
-            <br><br>
-            <button onclick="auth()">ENTRAR AL SISTEMA</button>
-        </div>
-    </div>
-
-    <div id="main-screen" class="container hidden">
-        <div style="display:flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f39c12; padding-bottom: 10px;">
-            <h3>BIENVENIDO: <span id="display-user"></span></h3>
-            <h3>SALDO: <span id="display-saldo"></span> USDT</h3>
-        </div>
-
-        <div class="card" style="margin-top: 20px;">
-            <h4>Publicar Venta de USDT</h4>
-            <input type="number" id="v-monto" placeholder="Monto USDT">
-            <input type="number" id="v-precio" placeholder="Precio Bs">
-            <button onclick="crearOrden()">PUBLICAR ANUNCIO</button>
-        </div>
-
-        <div class="card">
-            <h4>Mercado P2P Activo</h4>
-            <table>
-                <thead><tr><th>Vendedor ID</th><th>Monto</th><th>Precio</th><th>Acción</th></tr></thead>
-                <tbody id="lista-ordenes"></tbody>
-            </table>
-        </div>
-
-        <div id="chat-p2p" class="card hidden">
-            <h4 style="color: #27ae60;">SALA DE NEGOCIACIÓN PRIVADA #<span id="orden-activa"></span></h4>
-            <div id="chat-box"></div>
-            <div style="display: flex; gap: 10px;">
-                <input type="text" id="msg-input" placeholder="Escribe un mensaje..." style="flex-grow: 1;">
-                <button onclick="enviarMsg()">ENVIAR</button>
+        <div class="card" style="margin-top: 80px; text-align: center;">
+            <h1 style="color:var(--gold); margin-bottom:5px;">PLATINUM</h1>
+            <p style="font-size:0.7em; letter-spacing:3px; margin-bottom:30px;">ELITE P2P NETWORK</p>
+            <div id="auth-box">
+                <input type="text" id="user_in" placeholder="Usuario">
+                <input type="password" id="pass_in" placeholder="Contraseña">
+                <button onclick="auth()">INICIAR SESIÓN</button>
+                <p style="font-size: 0.8em; margin-top: 15px; color: #888;">
+                    ¿No tienes cuenta? <a href="#" onclick="toggleAuth(true)" style="color:var(--gold)">Regístrate</a>
+                </p>
             </div>
-            <hr style="border: 0.5px solid #333; margin: 20px 0;">
-            <button onclick="confirmarLiberacion()" style="background: #27ae60; color: white; width: 100%; height: 50px; font-size: 1.1em;">
-                ✔️ LIBERAR USDT (PAGO RECIBIDO)
-            </button>
+            <div id="reg-box" class="hidden">
+                <input type="text" id="reg_user" placeholder="Nuevo Usuario">
+                <input type="email" id="reg_email" placeholder="Correo Electrónico">
+                <input type="password" id="reg_pass" placeholder="Nueva Contraseña">
+                <button onclick="register()" style="background: #fff;">CREAR CUENTA</button>
+                <p style="font-size: 0.8em; margin-top: 15px; color: #888;">
+                    ¿Ya tienes cuenta? <a href="#" onclick="toggleAuth(false)" style="color:var(--gold)">Inicia Sesión</a>
+                </p>
+            </div>
         </div>
     </div>
 
-<script>
-    const socket = io();
-    let me = null;
-    let ordenActual = {};
+    <div id="main-screen" class="hidden">
+        <div class="nav">
+            <b onclick="verTab('mercado')">MERCADO</b>
+            <b onclick="verTab('historial')">HISTORIAL</b>
+            <b onclick="verTab('perfil')">PERFIL</b>
+        </div>
+        <div class="container">
+            <div style="text-align: right; margin-bottom: 15px;">
+                <small style="color:var(--gold)">Balance: <b id="display-saldo"></b> USDT</small>
+            </div>
+            <div id="tab-mercado">
+                <div class="card">
+                    <h4 style="margin:0 0 10px 0;">NUEVA VENTA</h4>
+                    <input type="number" id="v-monto" placeholder="Cantidad USDT">
+                    <input type="number" id="v-precio" placeholder="Precio Total Bs">
+                    <button onclick="crearOrden()">PUBLICAR ANUNCIO</button>
+                </div>
+                <div id="lista-ordenes"></div>
+            </div>
+            <div id="tab-historial" class="hidden">
+                <h4 style="color:var(--gold)">ÚLTIMAS OPERACIONES</h4>
+                <div id="lista-historial"></div>
+            </div>
+            <div id="tab-perfil" class="hidden">
+                <div class="card" style="text-align: center;">
+                    <div style="width:60px; height:60px; background:var(--gold); border-radius:50%; margin:auto; display:flex; align-items:center; justify-content:center; color:#000; font-weight:bold; font-size:1.5em;" id="avatar">U</div>
+                    <h2 id="prof-user"></h2>
+                    <p id="prof-kyc" style="font-size:0.8em;"></p>
+                    <button style="background:#222; color:var(--gold); border:1px solid var(--gold)" onclick="location.reload()">CERRAR SESIÓN</button>
+                </div>
+            </div>
+            <div id="chat-p2p" class="card hidden">
+                <div id="chat-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <b>ORDEN #<span id="orden-activa"></span></b>
+                    <b onclick="verTab('mercado')" style="color:red; cursor:pointer;">X</b>
+                </div>
+                <div id="chat-box"></div>
+                <div style="display:flex; gap:5px; margin-top:10px;">
+                    <input type="text" id="msg-input" placeholder="Escribe mensaje..." style="flex:1; margin:0;">
+                    <button onclick="enviarMsg()" style="width:auto;">></button>
+                </div>
+                <button id="btn-liberar" onclick="confirmarLiberacion()" style="background:green; color:white; margin-top:10px;">YA RECIBÍ EL PAGO (LIBERAR)</button>
+            </div>
+        </div>
+    </div>
 
-    // 1. Autenticación
-    async function auth() {
-        const res = await fetch('/login', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ usuario: user_in.value, clave: pass_in.value })
-        });
-        if (res.ok) {
-            me = await res.json();
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('main-screen').classList.remove('hidden');
-            document.getElementById('display-user').innerText = me.usuario;
-            document.getElementById('display-saldo').innerText = me.saldo;
-            cargarOrdenes();
-        } else { alert("Error: Credenciales inválidas"); }
-    }
+    <script>
+        const socket = io();
+        let me = null;
+        let ordenIdActual = null;
+        let datosOrdenActual = null;
 
-    // 2. Cargar Mercado
-    async function cargarOrdenes() {
-        const res = await fetch('/ordenes');
-        const ordenes = await res.json();
-        document.getElementById('lista-ordenes').innerHTML = ordenes.map(o => `
-            <tr>
-                <td>ID: ${o.vendedor_id}</td>
-                <td>${o.monto_usdt} USDT</td>
-                <td>${o.monto_bs} Bs</td>
-                <td><button onclick="abrirChat(${o.id}, ${o.monto_usdt}, ${o.vendedor_id})">COMPRAR / CHAT</button></td>
-            </tr>
-        `).join('');
-    }
-
-    // 3. Crear Anuncio
-    async function crearOrden() {
-        const res = await fetch('/crear-orden', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ seller_id: me.id, amount: v_monto.value, price: v_precio.value })
-        });
-        if(res.ok) { 
-            alert("¡Anuncio publicado con éxito!"); 
-            v_monto.value = ""; v_precio.value = "";
-            cargarOrdenes(); 
+        function toggleAuth(showReg) {
+            document.getElementById('auth-box').classList.toggle('hidden', showReg);
+            document.getElementById('reg-box').classList.toggle('hidden', !showReg);
         }
-    }
 
-    // 4. Chat Sockets
-    function abrirChat(id, monto, vendedor) {
-        ordenActual = { id, monto, vendedor };
-        document.getElementById('chat-p2p').classList.remove('hidden');
-        document.getElementById('orden-activa').innerText = id;
-        document.getElementById('chat-box').innerHTML = "<p style='color:gray italic'>Conexión cifrada establecida...</p>";
-        socket.emit('unirse_p2p', id);
-        window.scrollTo(0, document.body.scrollHeight);
-    }
+        async function auth() {
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: user_in.value, password: pass_in.value })
+            });
+            const data = await res.json();
+            if (data.success) {
+                me = data.user;
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-screen').classList.remove('hidden');
+                document.getElementById('display-saldo').innerText = me.balance_usdt || 0;
+                document.getElementById('prof-user').innerText = me.username;
+                document.getElementById('prof-kyc').innerText = "KYC: " + (me.kyc_status || 'Pendiente');
+                document.getElementById('avatar').innerText = me.username[0].toUpperCase();
+                cargarOrdenes();
+            } else { alert(data.message || "Error de acceso"); }
+        }
 
-    function enviarMsg() {
-        const input = document.getElementById('msg-input');
-        if (!input.value) return;
-        socket.emit('msg_p2p', { ordenId: ordenActual.id, user: me.usuario, msg: input.value });
-        input.value = "";
-    }
+        async function register() {
+            const res = await fetch('/registro', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: reg_user.value, email: reg_email.value, password: reg_pass.value })
+            });
+            if(res.ok) { alert("Usuario creado exitosamente."); toggleAuth(false); }
+            else { alert("Error al registrar."); }
+        }
 
-    socket.on('update_chat', (data) => {
-        const box = document.getElementById('chat-box');
-        box.innerHTML += `<p><strong>${data.user}:</strong> ${data.msg}</p>`;
-        box.scrollTop = box.scrollHeight;
-    });
+        async function cargarOrdenes(historial = false) {
+            const res = await fetch('/api/mercado');
+            const data = await res.json();
+            const html = data.map(o => `
+                <div class="card" style="border-left: 4px solid ${o.estatus === 'FINALIZADA' ? 'gray' : 'var(--gold)'}">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <small>ID: ${o.id} | Vendedor: ${o.username}</small><br>
+                            <b>${o.monto_usdt} USDT</b> → <b style="color:var(--gold)">${o.monto_bs} Bs</b>
+                        </div>
+                        ${o.estatus === 'ABIERTA' ? `<button style="width:auto; padding:5px 15px;" onclick="abrirChat(${o.id}, ${o.vendedor_id}, ${o.monto_usdt})">COMPRAR</button>` : `<small>${o.estatus}</small>`}
+                    </div>
+                </div>`).join('');
+            document.getElementById(historial ? 'lista-historial' : 'lista-ordenes').innerHTML = html;
+        }
 
-    // 5. Liberar Fondos (Finalizar P2P)
-    async function confirmarLiberacion() {
-        if(!confirm("¿CONFIRMAS LA LIBERACIÓN? Los USDT se moverán a la cuenta del comprador de forma irreversible.")) return;
-        
-        const res = await fetch('/liberar-fondos', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ 
-                ordenId: ordenActual.id, 
-                vendedorId: ordenActual.vendedor, 
-                compradorId: me.id, 
-                monto: ordenActual.monto 
-            })
+        function abrirChat(id, vendedorId, monto) {
+            ordenIdActual = id;
+            datosOrdenActual = { id, vendedorId, monto };
+            document.getElementById('chat-p2p').classList.remove('hidden');
+            document.getElementById('tab-mercado').classList.add('hidden');
+            document.getElementById('orden-activa').innerText = id;
+            document.getElementById('chat-box').innerHTML = "Cargando chat...";
+            document.getElementById('btn-liberar').style.display = (me.id === vendedorId) ? 'block' : 'none';
+            socket.emit('unirse_p2p', id);
+        }
+
+        function enviarMsg() {
+            const txt = document.getElementById('msg-input').value;
+            if(!txt) return;
+            socket.emit('msg_p2p', { ordenId: ordenIdActual, user: me.username, msg: txt });
+            document.getElementById('msg-input').value = "";
+        }
+
+        socket.on('historial_chat', (msgs) => {
+            const box = document.getElementById('chat-box');
+            box.innerHTML = msgs.map(m => `<div class="msg-line ${m.enviado_por === me.username ? 'msg-me' : 'msg-other'}"><b>${m.enviado_por}:</b> ${m.texto}</div>`).join('');
+            box.scrollTop = box.scrollHeight;
         });
 
-        if(res.ok) { 
-            alert("💸 ¡TRANSACCIÓN EXITOSA! USDT Enviados."); 
-            location.reload(); 
-        } else {
-            alert("Error en la liberación. Verifica tu saldo o conexión.");
+        socket.on('update_chat', (data) => {
+            const box = document.getElementById('chat-box');
+            box.innerHTML += `<div class="msg-line ${data.user === me.username ? 'msg-me' : 'msg-other'}"><b>${data.user}:</b> ${data.msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+        });
+
+        function verTab(t) {
+            document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
+            document.getElementById('tab-' + t).classList.remove('hidden');
+            if(t === 'mercado' || t === 'historial') cargarOrdenes(t === 'historial');
+            document.getElementById('chat-p2p').classList.add('hidden');
         }
-    }
-</script>
+
+        async function crearOrden() {
+            const res = await fetch('/crear-orden', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ seller_id: me.id, amount: v_monto.value, price: v_precio.value, tipo: 'VENTA' })
+            });
+            if(res.ok) { alert("Anuncio publicado"); verTab('mercado'); }
+            else { alert("Error: Revisa tu saldo"); }
+        }
+
+        async function confirmarLiberacion() {
+            if(!confirm("¿Confirmas recibir el pago?")) return;
+            const res = await fetch('/liberar-fondos', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ ordenId: ordenIdActual, vendedorId: me.id, compradorId: me.id, monto: datosOrdenActual.monto })
+            });
+            if(res.ok) { alert("¡Éxito!"); location.reload(); }
+        }
+    </script>
 </body>
 </html>
-EOF
