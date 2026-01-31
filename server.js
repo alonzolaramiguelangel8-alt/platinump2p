@@ -73,4 +73,5 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 PLATINUM V3 - FULL AUTO en puerto ${PORT}`);
 });
- 
+
+// Version final estable
