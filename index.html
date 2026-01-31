@@ -46,6 +46,7 @@
             </div>
         </div>
     </div>
+
     <div id="main-screen" class="hidden">
         <div class="nav">
             <b onclick="verTab('mercado')">MERCADO</b>
@@ -91,6 +92,7 @@
             </div>
         </div>
     </div>
+
     <script>
         const socket = io();
         let me = null;
@@ -127,19 +129,18 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ username: reg_user.value, email: reg_email.value, password: reg_pass.value })
             });
-            if(res.ok) { alert("Usuario creado. Ya puedes iniciar sesión."); toggleAuth(false); }
-            else { alert("Error al registrar: El usuario o email ya existen."); }
+            if(res.ok) { alert("Usuario creado exitosamente."); toggleAuth(false); }
+            else { alert("Error al registrar."); }
         }
 
         async function cargarOrdenes(historial = false) {
-            const url = '/api/mercado';
-            const res = await fetch(url);
+            const res = await fetch('/api/mercado');
             const data = await res.json();
             const html = data.map(o => `
                 <div class="card" style="border-left: 4px solid ${o.estatus === 'FINALIZADA' ? 'gray' : 'var(--gold)'}">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <small>Orden ID: ${o.id} | Vendedor: ${o.username}</small><br>
+                            <small>ID: ${o.id} | Vendedor: ${o.username}</small><br>
                             <b>${o.monto_usdt} USDT</b> → <b style="color:var(--gold)">${o.monto_bs} Bs</b>
                         </div>
                         ${o.estatus === 'ABIERTA' ? `<button style="width:auto; padding:5px 15px;" onclick="abrirChat(${o.id}, ${o.vendedor_id}, ${o.monto_usdt})">COMPRAR</button>` : `<small>${o.estatus}</small>`}
@@ -174,23 +175,14 @@
 
         socket.on('update_chat', (data) => {
             const box = document.getElementById('chat-box');
-            const card = document.getElementById('chat-p2p');
-            const clase = data.user === me.username ? 'msg-me' : 'msg-other';
-            box.innerHTML += `<div class="msg-line ${clase}"><b>${data.user}:</b> ${data.msg}</div>`;
+            box.innerHTML += `<div class="msg-line ${data.user === me.username ? 'msg-me' : 'msg-other'}"><b>${data.user}:</b> ${data.msg}</div>`;
             box.scrollTop = box.scrollHeight;
-            if(data.user !== me.username) {
-                card.classList.add('notif-flash');
-                setTimeout(() => card.classList.remove('notif-flash'), 800);
-            }
         });
-
-        socket.on('finalizado', () => { alert("La transacción ha sido completada exitosamente."); location.reload(); });
 
         function verTab(t) {
             document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
             document.getElementById('tab-' + t).classList.remove('hidden');
-            if(t === 'historial') cargarOrdenes(true);
-            if(t === 'mercado') cargarOrdenes(false);
+            if(t === 'mercado' || t === 'historial') cargarOrdenes(t === 'historial');
             document.getElementById('chat-p2p').classList.add('hidden');
         }
 
@@ -200,18 +192,18 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ seller_id: me.id, amount: v_monto.value, price: v_precio.value, tipo: 'VENTA' })
             });
-            if(res.ok) { alert("Anuncio publicado y saldo puesto en custodia."); verTab('mercado'); }
-            else { alert("Error: Verifica tu saldo."); }
+            if(res.ok) { alert("Anuncio publicado"); verTab('mercado'); }
+            else { alert("Error: Revisa tu saldo"); }
         }
 
         async function confirmarLiberacion() {
-            if(!confirm("¿Confirmas que recibiste el dinero?")) return;
+            if(!confirm("¿Confirmas recibir el pago?")) return;
             const res = await fetch('/liberar-fondos', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ ordenId: ordenIdActual, vendedorId: datosOrdenActual.vendedorId, compradorId: me.id, monto: datosOrdenActual.monto })
+                body: JSON.stringify({ ordenId: ordenIdActual, vendedorId: me.id, compradorId: me.id, monto: datosOrdenActual.monto })
             });
-            if(res.ok) { alert("¡Fondos liberados!"); location.reload(); }
+            if(res.ok) { alert("¡Éxito!"); location.reload(); }
         }
     </script>
 </body>
