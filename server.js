@@ -85,7 +85,7 @@ app.get('/admin-power-up', async (req, res) => {
 });
 
 // --- 3. RUTAS DE USUARIO Y REGISTRO ---
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 app.post('/registro', async (req, res) => {
     const { username, email, password } = req.body;
