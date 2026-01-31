@@ -20,23 +20,28 @@ const pool = new Pool({
 // --- 1. CONSTRUCTOR DE DB PROFESIONAL (100% COMPLETO) ---
 const initDB = async () => {
     try {
+        // ESTA LÍNEA ES CLAVE: Borra la tabla vieja que está dando error
+        await pool.query('DROP TABLE IF EXISTS users CASCADE;'); 
+
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
+            CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
-                username TEXT UNIQUE,
-                email TEXT UNIQUE,
-                password TEXT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
                 balance_usdt DECIMAL DEFAULT 0,
                 balance_congelado DECIMAL DEFAULT 0,
                 rol TEXT DEFAULT 'usuario',
-                kyc_status TEXT DEFAULT 'no_iniciado',
-                foto_cedula TEXT,
-                video_rostro TEXT,
-                reputacion INTEGER DEFAULT 100,
                 is_admin BOOLEAN DEFAULT false,
-                verificado BOOLEAN DEFAULT false,
+                kyc_status TEXT DEFAULT 'verificado',
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        `);
+        console.log("✅ PLATINUM DB: Tabla de usuarios reiniciada y limpia.");
+    } catch (err) {
+        console.error("❌ Error inicializando DB:", err.message);
+    }
+};
             CREATE TABLE IF NOT EXISTS orders (
                 id SERIAL PRIMARY KEY,
                 vendedor_id INTEGER,
