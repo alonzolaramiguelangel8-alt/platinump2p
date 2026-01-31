@@ -26,7 +26,11 @@ app.post('/login', async (req, res) => {
         } else { res.status(401).json({ error: "Fallo" }); }
     } catch (e) { res.status(500).send(e); }
 });
+const path = require('path');
 
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 // HISTORIAL Y MERCADO
 app.get('/ordenes', async (req, res) => {
     const { user_id, historico } = req.query;
@@ -65,4 +69,7 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3001, '0.0.0.0', () => console.log('🚀 PLATINUM V3 - FULL AUTO'));
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 PLATINUM V3 - FULL AUTO en puerto ${PORT}`);
+});
