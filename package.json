@@ -1,10 +1,21 @@
 {
+  "name": "platinum-p2p",
+  "version": "1.0.0",
+  "description": "Plataforma Elite P2P",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "b4a": "^1.7.3",
     "bcrypt": "^6.0.0",
-    "express": "^5.2.1",
+    "express": "^4.18.2",
     "hyperswarm": "^4.16.0",
-    "pg": "^8.18.0",
-    "socket.io": "^4.8.3"
+    "pg": "^8.11.3",
+    "socket.io": "^4.7.2",
+    "path": "^0.12.7"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
