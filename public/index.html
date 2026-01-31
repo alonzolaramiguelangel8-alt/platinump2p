@@ -61,8 +61,7 @@ initDB();
 // --- 2. RUTAS DE ACCESO Y ADMIN ---
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 
 app.get('/admin-power-up', async (req, res) => {
     try {
