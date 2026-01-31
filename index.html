@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platinum Elite P2P</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root { --gold: #d4af37; --dark: #0a0a0a; --card: #151515; }
+        body { background: var(--dark); color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; overflow-x: hidden; }
+        .container { max-width: 600px; margin: auto; padding: 15px; }
+        .card { background: var(--card); border: 1px solid #222; padding: 15px; border-radius: 15px; margin-bottom: 15px; transition: 0.3s; }
+        .nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
+        .nav b { cursor: pointer; font-size: 0.8em; letter-spacing: 1px; }
+        .hidden { display: none; }
+        button { background: linear-gradient(45deg, #d4af37, #f2d06b); border: none; padding: 12px; cursor: pointer; font-weight: bold; border-radius: 8px; width: 100%; color: #000; }
+        input { background: #111; color: #fff; border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 10px; width: 95%; }
+        #chat-box { height: 300px; overflow-y: auto; background: #050505; padding: 15px; border-radius: 10px; border: 1px solid #222; display: flex; flex-direction: column; }
+        .msg-line { margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 0.9em; }
+        .msg-me { background: var(--gold); color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .msg-other { background: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .notif-flash { border: 2px solid var(--gold) !important; box-shadow: 0 0 15px var(--gold); }
+    </style>
+</head>
+<body>
+    <div id="login-screen" class="container">
+        <div class="card" style="margin-top: 100px; text-align: center;">
+            <h1 style="color:var(--gold); margin-bottom:5px;">PLATINUM</h1>
+            <p style="font-size:0.7em; letter-spacing:3px; margin-bottom:30px;">ELITE P2P NETWORK</p>
+            <input type="text" id="user_in" placeholder="Usuario">
+            <input type="password" id="pass_in" placeholder="Contraseña">
+            <button onclick="auth()">INICIAR SESIÓN</button>
+        </div>
+    </div>
+
+    <div id="main-screen" class="hidden">
+        <div class="nav">
+            <b onclick="verTab('mercado')">MERCADO</b>
+            <b onclick="verTab('historial')">HISTORIAL</b>
+            <b onclick="verTab('perfil')">PERFIL</b>
+        </div>
+        
+        <div class="container">
+            <div style="text-align: right; margin-bottom: 15px;">
+                <small style="color:var(--gold)">Balance: <b id="display-saldo"></b> USDT</small>
+            </div>
+
+            <div id="tab-mercado">
+                <div class="card">
+                    <h4 style="margin:0 0 10px 0;">NUEVA VENTA</h4>
+                    <input type="number" id="v-monto" placeholder="Cantidad USDT">
+                    <input type="number" id="v-precio" placeholder="Precio Total Bs">
+                    <button onclick="crearOrden()">PUBLICAR ANUNCIO</button>
+                </div>
+                <div id="lista-ordenes"></div>
+            </div>
+
+            <div id="tab-historial" class="hidden">
+                <h4 style="color:var(--gold)">ÚLTIMAS OPERACIONES</h4>
+                <div id="lista-historial"></div>
+            </div>
+
+            <div id="tab-perfil" class="hidden">
+                <div class="card" style="text-align: center;">
+                    <div style="width:60px; height:60px; background:var(--gold); border-radius:50%; margin:auto; display:flex; align-items:center; justify-content:center; color:#000; font-weight:bold; font-size:1.5em;" id="avatar">U</div>
+                    <h2 id="prof-user"></h2>
+                    <p id="prof-kyc" style="font-size:0.8em;"></p>
+                    <button style="background:#222; color:var(--gold); border:1px solid var(--gold)" onclick="location.reload()">CERRAR SESIÓN</button>
+                </div>
+            </div>
+
+            <div id="chat-p2p" class="card hidden">
+                <div id="chat-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <b>ORDEN #<span id="orden-activa"></span></b>
+                    <b onclick="verTab('mercado')" style="color:red; cursor:pointer;">X</b>
+                </div>
+                <div id="chat-box"></div>
+                <div style="display:flex; gap:5px; margin-top:10px;">
+                    <input type="text" id="msg-input" placeholder="Escribe mensaje..." style="flex:1; margin:0;">
+                    <button onclick="enviarMsg()" style="width:auto;">></button>
+                </div>
+                <button id="btn-liberar" onclick="confirmarLiberacion()" style="background:green; color:white; margin-top:10px;">YA RECIBÍ EL PAGO (LIBERAR)</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const socket = io();
+    let me = null;
+    let ordenIdActual = null;
+
+    async function auth() {
+        const res = await fetch('/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ usuario: user_in.value, clave: pass_in.value })
+        });
+        if (res.ok) {
+            me = await res.json();
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-screen').classList.remove('hidden');
+            document.getElementById('display-saldo').innerText = me.balance_usdt;
+            document.getElementById('prof-user').innerText = me.username;
+            document.getElementById('prof-kyc').innerText = "KYC: " + me.kyc_status;
+            document.getElementById('avatar').innerText = me.username[0].toUpperCase();
+            cargarOrdenes();
+        } else { alert("Error de acceso"); }
+    }
+
+    async function cargarOrdenes(historial = false) {
+        const url = historial ? `/ordenes?historico=true&user_id=${me.id}` : '/ordenes';
+        const res = await fetch(url);
+        const data = await res.json();
+        const html = data.map(o => `
+            <div class="card" style="border-left: 4px solid ${o.estatus === 'FINALIZADA' ? 'gray' : 'var(--gold)'}">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <small>Vendedor: ${o.vendedor_id}</small><br>
+                        <b>${o.monto_usdt} USDT</b> → <b style="color:var(--gold)">${o.monto_bs} Bs</b>
+                    </div>
+                    ${o.estatus === 'ABIERTA' ? `<button style="width:auto; padding:5px 15px;" onclick="abrirChat(${o.id})">COMPRAR</button>` : `<small>${o.estatus}</small>`}
+                </div>
+            </div>`).join('');
+        document.getElementById(historial ? 'lista-historial' : 'lista-ordenes').innerHTML = html;
+    }
+
+    function abrirChat(id) {
+        ordenIdActual = id;
+        document.getElementById('chat-p2p').classList.remove('hidden');
+        document.getElementById('tab-mercado').classList.add('hidden');
+        document.getElementById('orden-activa').innerText = id;
+        document.getElementById('chat-box').innerHTML = "";
+        socket.emit('unirse_p2p', id);
+    }
+
+    function enviarMsg() {
+        const txt = document.getElementById('msg-input').value;
+        if(!txt) return;
+        socket.emit('msg_p2p', { ordenId: ordenIdActual, user: me.username, msg: txt });
+        document.getElementById('msg-input').value = "";
+    }
+
+    socket.on('update_chat', (data) => {
+        const box = document.getElementById('chat-box');
+        const card = document.getElementById('chat-p2p');
+        const clase = data.user === me.username ? 'msg-me' : 'msg-other';
+        box.innerHTML += `<div class="msg-line ${clase}"><b>${data.user}:</b> ${data.msg}</div>`;
+        box.scrollTop = box.scrollHeight;
+        
+        // EFECTO VISUAL DE NOTIFICACIÓN
+        if(data.user !== me.username) {
+            card.classList.add('notif-flash');
+            setTimeout(() => card.classList.remove('notif-flash'), 1000);
+        }
+    });
+
+    function verTab(t) {
+        document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
+        document.getElementById('tab-' + t).classList.remove('hidden');
+        if(t === 'historial') cargarOrdenes(true);
+        if(t === 'mercado') cargarOrdenes(false);
+        document.getElementById('chat-p2p').classList.add('hidden');
+    }
+
+    async function crearOrden() {
+        const res = await fetch('/crear-orden', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ seller_id: me.id, amount: v_monto.value, price: v_precio.value })
+        });
+        if(res.ok) { alert("Anuncio en vivo"); verTab('mercado'); }
+    }
+
+    async function confirmarLiberacion() {
+        if(!confirm("¿Confirmas que recibiste el dinero?")) return;
+        const res = await fetch('/liberar-fondos', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ordenId: ordenIdActual, vendedorId: me.id, compradorId: me.id, monto: 1 }) // Simplificado para prueba
+        });
+        if(res.ok) location.reload();
+    }
+
+    socket.on('nuevo_anuncio', () => { if(!document.getElementById('tab-mercado').classList.contains('hidden')) cargarOrdenes(); });
+</script>
+</body>
+</html>

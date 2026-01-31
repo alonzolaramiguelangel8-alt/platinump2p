@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "b4a": "^1.7.3",
+    "bcrypt": "^6.0.0",
+    "express": "^5.2.1",
+    "hyperswarm": "^4.16.0",
+    "pg": "^8.18.0",
+    "socket.io": "^4.8.3"
+  }
+}
