@@ -20,9 +20,6 @@ const pool = new Pool({
 // --- 1. CONSTRUCTOR DE DB PROFESIONAL (100% COMPLETO) ---
 const initDB = async () => {
     try {
-        // ESTA LÍNEA ES CLAVE: Borra la tabla vieja que está dando error
-        await pool.query('DROP TABLE IF EXISTS users CASCADE;'); 
-
         await pool.query(`
             CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
