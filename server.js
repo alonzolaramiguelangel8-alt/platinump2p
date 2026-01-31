@@ -9,7 +9,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
-app.use(express.static('/root/platinum_app'));
+app.use(express.static(path.join(__dirname, 'public')))
 
 const pool = new Pool({
     user: 'postgres', host: 'localhost', database: 'platinum_db',
@@ -31,6 +31,19 @@ const path = require('path');
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
+// RUTA PRINCIPAL - CARGA EL DISEÑO
+app.get('/', (req, res) => {
+    const filePath = path.join(__dirname, 'index.html');
+    console.log("DEBUG: Buscando index.html en:", filePath);
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            console.error("ERROR DE LECTURA:", err.message);
+            // Esto nos mostrará el error real en la pantalla del navegador
+            res.status(500).send("Error de permisos. Ruta intentada: " + filePath);
+        }
+    });
+});
+
 // HISTORIAL Y MERCADO
 app.get('/ordenes', async (req, res) => {
     const { user_id, historico } = req.query;
