@@ -2,34 +2,42 @@ const express = require('express');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
-const path = require('path'); // Importante para las rutas
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// --- CONFIGURACIÓN DE RUTAS ---
-
-// 1. Servir archivos de la carpeta raíz
-app.use(express.static(path.join(__dirname)));
-
-// 2. Ruta principal (Cuando entras a la URL pelada)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'login.html'));
-});
-
-// 3. Ruta del Dashboard
-app.get('/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// --- EL RESTO DEL CÓDIGO (DB y API) ---
+// Conexión a DB
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
+// Forzar que sirva archivos desde la raíz
+app.use(express.static(__dirname));
+
+// RUTA PRINCIPAL MEJORADA
+app.get('/', (req, res) => {
+    const filePath = path.join(__dirname, 'login.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            console.error("❌ ERROR: No existe login.html en la raíz.");
+            res.status(404).send(`
+                <body style="background:#121212;color:white;text-align:center;padding:50px;font-family:sans-serif;">
+                    <h1>⚠️ Archivo no encontrado</h1>
+                    <p>El servidor no encuentra <b>login.html</b> en GitHub.</p>
+                    <p>Verifica que el archivo no esté dentro de una carpeta y que el nombre esté en minúsculas.</p>
+                    <hr>
+                    <small>Ruta intentada: ${filePath}</small>
+                </body>
+            `);
+        }
+    });
+});
+
+// API REGISTER
 app.post('/api/auth/register', async (req, res) => {
     const { username, email, password } = req.body;
     try {
@@ -40,11 +48,10 @@ app.post('/api/auth/register', async (req, res) => {
         );
         await pool.query("INSERT INTO wallets (user_id) VALUES ($1)", [newUser.rows[0].id]);
         res.json({ success: true });
-    } catch (e) {
-        res.status(400).json({ error: "Error al registrar" });
-    }
+    } catch (e) { res.status(400).json({ error: "Error en registro" }); }
 });
 
+// API LOGIN
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -57,4 +64,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor en puerto ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor en puerto ${PORT}`);
+    console.log(`📂 Carpeta actual: ${__dirname}`);
+});
