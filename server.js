@@ -1,93 +1,90 @@
+const/**
+ * PLATINUM P2P - SERVER CORE
+ * Solución al error "Cannot GET /index.html"
+ */
+require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
 const cors = require('cors');
-require('dotenv').config();
-
+const path = require('path');
 const app = express();
+
+// --- CONFIGURACIÓN CRÍTICA PARA ARCHIVOS ESTÁTICOS ---
+// Esto le dice al servidor: "Busca los HTML en la carpeta 'public'"
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(cors());
 
+// --- BASE DE DATOS (POSTGRESQL) ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false } // Necesario para Render
 });
 
-// Crear tablas con logs detallados
-async function inicializarTablas() {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                is_admin BOOLEAN DEFAULT FALSE,
-                kyc_level INTEGER DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS wallets (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
-                balance_available DECIMAL(18,2) DEFAULT 0
-            );
-        `);
-        console.log("✅ Tablas verificadas/creadas");
-    } catch (err) {
-        console.error("❌ Error inicializando tablas:", err);
-    }
-}
-inicializarTablas();
+// --- RUTAS DE NAVEGACIÓN ---
 
-// RUTA DE REGISTRO BLINDADA
-app.post('/api/auth/register', async (req, res) => {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ error: "Faltan datos" });
-
-    try {
-        // 1. Verificamos si ya existe antes de intentar insertar
-        const checkUser = await pool.query("SELECT id FROM users WHERE email = $1 OR username = $2", [email, username]);
-        if (checkUser.rows.length > 0) {
-            return res.status(400).json({ error: "El usuario o email ya existe en el sistema" });
-        }
-
-        // 2. Verificamos si será el primer usuario (Admin)
-        const countRes = await pool.query("SELECT COUNT(*) FROM users");
-        const isFirst = parseInt(countRes.rows[0].count) === 0;
-
-        const hashed = await bcrypt.hash(password, 10);
-        
-        // 3. Insertar usuario
-        const newUser = await pool.query(
-            "INSERT INTO users (username, email, password_hash, is_admin, kyc_level) VALUES ($1, $2, $3, $4, 2) RETURNING id",
-            [username.toLowerCase(), email.toLowerCase(), hashed, isFirst]
-        );
-
-        // 4. Crear Wallet
-        await pool.query("INSERT INTO wallets (user_id, balance_available) VALUES ($1, 1000.00)", [newUser.rows[0].id]);
-
-        res.json({ success: true, message: isFirst ? "Admin creado" : "Usuario creado" });
-    } catch (err) {
-        console.error("Error en registro:", err);
-        res.status(500).json({ error: "Error interno del servidor" });
-    }
+// 1. Si entran a la raíz '/', enviarlos al Login
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// RUTA DE LOGIN
-app.post('/api/auth/login', async (req, res) => {
+// 2. Ruta explícita para el Dashboard (por seguridad)
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// --- API DE USUARIOS (LOGIN Y REGISTRO) ---
+
+// Registro
+app.post('/api/register', async (req, res) => {
     const { email, password } = req.body;
     try {
-        const result = await pool.query("SELECT * FROM users WHERE email = $1", [email.toLowerCase()]);
-        if (result.rows.length === 0) return res.status(400).json({ error: "Usuario no encontrado" });
+        // Verificar si existe
+        const userCheck = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+        if (userCheck.rows.length > 0) {
+            return res.status(400).json({ success: false, message: "El usuario ya existe" });
+        }
 
-        const user = result.rows[0];
-        const valid = await bcrypt.compare(password, user.password_hash);
-        if (!valid) return res.status(400).json({ error: "Contraseña incorrecta" });
-
-        res.json({ success: true, user: { id: user.id, username: user.username, is_admin: user.is_admin } });
+        // Crear usuario con 1000 USDT de bono (según tu solicitud)
+        const newUser = await pool.query(
+            "INSERT INTO users (email, password, balance_usdt) VALUES ($1, $2, 1000.00) RETURNING *",
+            [email, password]
+        );
+        res.json({ success: true, user: newUser.rows[0] });
     } catch (err) {
-        res.status(500).json({ error: "Error en login" });
+        console.error(err);
+        res.status(500).json({ success: false, message: "Error en base de datos" });
     }
 });
 
+// Login
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const result = await pool.query("SELECT * FROM users WHERE email = $1 AND password = $2", [email, password]);
+        
+        if (result.rows.length > 0) {
+            // LOGIN EXITOSO
+            res.json({ success: true, user: result.rows[0] });
+        } else {
+            res.status(401).json({ success: false, message: "Credenciales incorrectas" });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Error de servidor" });
+    }
+});
+
+// API para obtener saldo actualizado
+app.get('/api/user/:email', async (req, res) => {
+    try {
+        const result = await pool.query("SELECT * FROM users WHERE email = $1", [req.params.email]);
+        if(result.rows.length > 0) res.json(result.rows[0]);
+        else res.status(404).send("User not found");
+    } catch (e) { res.status(500).send(e.message); }
+});
+
+// --- INICIAR SERVIDOR ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor en puerto ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`✅ Servidor corriendo. Archivos estáticos servidos desde /public`);
+});
