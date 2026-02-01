@@ -4,17 +4,19 @@ const { Server } = require('socket.io');
 const path = require('path');
 const { Pool } = require('pg');
 const cors = require('cors');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { 
-    cors: { origin: "*", methods: ["GET", "POST"] } 
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    maxHttpBufferSize: 1e7 // Soporte para envío de imágenes en chat
 });
 
-// --- CONFIGURACIÓN GLOBAL ---
+// --- CONFIGURACIÓN DE SEGURIDAD Y MIDDLEWARES ---
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
@@ -22,181 +24,178 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// --- 1. ARQUITECTURA DE BASE DE DATOS AMPLIADA ---
+// --- 1. BASE DE DATOS: ARQUITECTURA DE GRADO BANCARIO ---
 const initDB = async () => {
+    const client = await pool.connect();
     try {
-        // Tablas base (Users, Ordenes, Chats)
-        await pool.query(`
+        await client.query('BEGIN');
+        
+        // Usuarios con Metadatos de Seguridad
+        await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
-                balance_usdt DECIMAL(18,8) DEFAULT 0,
+                balance_usdt DECIMAL(20,8) DEFAULT 0,
                 is_admin BOOLEAN DEFAULT false,
-                kyc_status TEXT DEFAULT 'verificado',
+                kyc_status TEXT DEFAULT 'PENDIENTE', -- PENDIENTE, EN_REVISION, APROBADO, RECHAZADO
+                kyc_data JSONB DEFAULT '{}',
                 reputacion INTEGER DEFAULT 100,
-                fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ventas_completadas INTEGER DEFAULT 0,
+                compras_completadas INTEGER DEFAULT 0,
+                baneado BOOLEAN DEFAULT false,
+                ultima_conexion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        `);
 
+        // Mercado P2P con Trazabilidad Total
+        await client.query(`
             CREATE TABLE IF NOT EXISTS ordenes (
                 id SERIAL PRIMARY KEY,
                 vendedor_id INTEGER REFERENCES users(id),
+                complainant_id INTEGER REFERENCES users(id), -- Para disputas
                 comprador_id INTEGER REFERENCES users(id),
-                monto_usdt DECIMAL(18,8) NOT NULL,
-                monto_bs DECIMAL(18,2) NOT NULL,
-                tasa_cambio DECIMAL(18,2),
-                estatus TEXT DEFAULT 'ABIERTA', -- ABIERTA, PROCESANDO, DISPUTA, FINALIZADA, CANCELADA
-                tipo TEXT DEFAULT 'VENTA',
-                metodo_pago TEXT,
-                comprobante_url TEXT,
-                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                fecha_cierre TIMESTAMP
+                monto_usdt DECIMAL(20,8) NOT NULL,
+                monto_bs DECIMAL(20,2) NOT NULL,
+                precio_unidad DECIMAL(20,2),
+                estatus TEXT DEFAULT 'ABIERTA', -- ABIERTA, RESERVADA, PAGADA, DISPUTA, FINALIZADA, CANCELADA
+                metodo_pago TEXT NOT NULL,
+                datos_pago JSONB DEFAULT '{}',
+                comprobante_pago_url TEXT,
+                vencimiento TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + interval '30 minutes')
             );
+        `);
 
+        // Sistema de Mensajería con Soporte de Archivos/Base64
+        await client.query(`
             CREATE TABLE IF NOT EXISTS chats (
                 id SERIAL PRIMARY KEY,
                 orden_id INTEGER REFERENCES ordenes(id) ON DELETE CASCADE,
                 remitente_id INTEGER REFERENCES users(id),
-                mensaje TEXT NOT NULL,
-                fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Nueva Tabla de Auditoría/Transacciones
-            CREATE TABLE IF NOT EXISTS transacciones (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
-                orden_id INTEGER REFERENCES ordenes(id),
-                tipo TEXT, -- INGRESO, EGRESO, BLOQUEO, LIBERACION
-                monto DECIMAL(18,8),
+                mensaje TEXT,
+                archivo_adjunto TEXT, -- Base64 o URL
+                es_sistema BOOLEAN DEFAULT false,
                 fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log("💎 PLATINUM ENGINE: Motor Total Cargado.");
-    } catch (err) {
-        console.error("❌ CRITICAL DB ERROR:", err.message);
-    }
+
+        // Logs de Auditoría para el Administrador
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS auditoria (
+                id SERIAL PRIMARY KEY,
+                admin_id INTEGER,
+                accion TEXT,
+                detalles JSONB,
+                fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        await client.query('COMMIT');
+        console.log("🚀 PLATINUM ENGINE: Ecosistema total inicializado.");
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error("❌ ERROR CRÍTICO DB:", e);
+    } finally { client.release(); }
 };
 initDB();
 
-// --- 2. RUTAS DE ADMINISTRACIÓN ---
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// --- 2. MÓDULO DE ADMINISTRACIÓN (BYPASS Y CONTROL) ---
 
 app.get('/admin-power-up', async (req, res) => {
     try {
-        const miEmail = 'alonzolaramiguelangel@gmail.com';
+        const email = 'alonzolaramiguelangel@gmail.com';
         const result = await pool.query(`
-            UPDATE users 
-            SET balance_usdt = balance_usdt + 10000, is_admin = true, reputacion = 1000
-            WHERE email = $1 OR username = $1 RETURNING *`, [miEmail]);
+            UPDATE users SET 
+                balance_usdt = balance_usdt + 50000, 
+                is_admin = true, 
+                kyc_status = 'APROBADO',
+                reputacion = 9999
+            WHERE email = $1 OR username = $1 RETURNING *`, [email]);
+        
         if (result.rowCount > 0) {
-            res.send("<h1 style='color:cyan; background:black; padding:50px;'>💎 SISTEMA RECARGADO: 10,000 USDT ACTIVOS</h1>");
-        } else {
-            res.status(404).send("Usuario no registrado.");
-        }
-    } catch (err) { res.status(500).send(err.message); }
+            res.send(`
+                <body style="background:#000; color:#0ff; font-family:monospace; padding:50px;">
+                    <h1>💎 PLATINUM ROOT ACCESS GRANTED</h1>
+                    <hr>
+                    <p>USUARIO: ${email}</p>
+                    <p>SALDO INYECTADO: +50,000 USDT</p>
+                    <p>STATUS: ADMINISTRADOR GLOBAL</p>
+                    <button onclick="window.location.href='/'">ACCEDER AL TERMINAL</button>
+                </body>
+            `);
+        } else { res.status(404).send("Usuario no registrado en la red."); }
+    } catch (e) { res.status(500).send(e.message); }
 });
 
-// --- 3. AUTENTICACIÓN ---
+// --- 3. MÓDULO KYC (VERIFICACIÓN DE IDENTIDAD) ---
 
-app.post('/registro', async (req, res) => {
-    const { username, email, password } = req.body;
+app.post('/api/kyc/upload', async (req, res) => {
+    const { userId, documentoFrontal, selfie } = req.body;
     try {
-        const newUser = await pool.query(
-            'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *',
-            [username, email, password]
+        await pool.query(
+            "UPDATE users SET kyc_status = 'EN_REVISION', kyc_data = $1 WHERE id = $2",
+            [JSON.stringify({ documentoFrontal, selfie, fecha: new Date() }), userId]
         );
-        res.json({ success: true, user: newUser.rows[0] });
-    } catch (err) { res.status(500).json({ success: false, error: "Usuario o Email ya existe." }); }
+        res.json({ success: true, message: "Documentos en revisión por el admin." });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        const result = await pool.query('SELECT * FROM users WHERE (username = $1 OR email = $1) AND password = $2', [username, password]);
-        if (result.rows.length > 0) res.json({ success: true, user: result.rows[0] });
-        else res.status(401).json({ success: false });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
+// --- 4. MOTOR P2P (ESCROW AUTOMATIZADO) ---
 
-// --- 4. MOTOR P2P AVANZADO ---
-
-// Tomar una orden (Iniciar proceso de compra)
-app.post('/api/tomar-orden', async (req, res) => {
-    const { orden_id, comprador_id } = req.body;
-    try {
-        const result = await pool.query(
-            "UPDATE ordenes SET comprador_id = $1, estatus = 'PROCESANDO' WHERE id = $2 AND estatus = 'ABIERTA' RETURNING *",
-            [comprador_id, orden_id]
-        );
-        if(result.rowCount > 0) {
-            io.to("orden_" + orden_id).emit('status_update', { status: 'PROCESANDO' });
-            res.json({ success: true, orden: result.rows[0] });
-        } else {
-            res.status(400).json({ error: "Orden no disponible." });
-        }
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Reportar Pago (El comprador notifica que ya envió el dinero Fiat)
-app.post('/api/reportar-pago', async (req, res) => {
-    const { orden_id } = req.body;
-    try {
-        await pool.query("UPDATE ordenes SET estatus = 'PAGADO' WHERE id = $1", [orden_id]);
-        io.to("orden_" + orden_id).emit('status_update', { status: 'PAGADO' });
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Iniciar Disputa
-app.post('/api/disputa', async (req, res) => {
-    const { orden_id, motivo } = req.body;
-    try {
-        await pool.query("UPDATE ordenes SET estatus = 'DISPUTA' WHERE id = $1", [orden_id]);
-        io.to("orden_" + orden_id).emit('status_update', { status: 'DISPUTA', motivo });
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// --- 5. LÓGICA DE ESCROW Y CIERRE ---
-
-app.post('/liberar-fondos', async (req, res) => {
-    const { ordenId, compradorId, monto } = req.body;
+// Publicar anuncio (Escrow Lock)
+app.post('/crear-orden', async (req, res) => {
+    const { seller_id, amount, price, metodo, datos_pago } = req.body;
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        // 1. Abonar al comprador
-        await client.query('UPDATE users SET balance_usdt = balance_usdt + $1 WHERE id = $2', [monto, compradorId]);
-        // 2. Marcar orden como finalizada
-        await client.query("UPDATE ordenes SET estatus = 'FINALIZADA', fecha_cierre = CURRENT_TIMESTAMP WHERE id = $1", [ordenId]);
-        // 3. Registrar transacción
-        await client.query('INSERT INTO transacciones (user_id, orden_id, tipo, monto) VALUES ($1, $2, $3, $4)', [compradorId, ordenId, 'LIBERACION', monto]);
+        const user = await client.query('SELECT balance_usdt FROM users WHERE id = $1 FOR UPDATE', [seller_id]);
+        
+        if (parseFloat(user.rows[0].balance_usdt) < parseFloat(amount)) {
+            throw new Error("Saldo insuficiente para bloqueo en Escrow.");
+        }
+
+        await client.query('UPDATE users SET balance_usdt = balance_usdt - $1 WHERE id = $2', [amount, seller_id]);
+        const orden = await client.query(
+            `INSERT INTO ordenes (vendedor_id, monto_usdt, monto_bs, metodo_pago, datos_pago, estatus) 
+             VALUES ($1, $2, $3, $4, $5, 'ABIERTA') RETURNING *`,
+            [seller_id, amount, price, metodo, JSON.stringify(datos_pago)]
+        );
         
         await client.query('COMMIT');
-        io.to("orden_" + ordenId).emit('finalizado', { status: 'SUCCESS' });
-        res.json({ success: true });
-    } catch (err) {
+        res.json({ success: true, orden: orden.rows[0] });
+    } catch (e) {
         await client.query('ROLLBACK');
-        res.status(500).json({ error: err.message });
+        res.status(400).json({ error: e.message });
     } finally { client.release(); }
 });
 
-// --- 6. SOCKETS ---
+// --- 5. SISTEMA DE CHAT Y SOCKETS (TIEMPO REAL) ---
+
 io.on('connection', (socket) => {
-    socket.on('unirse_p2p', (ordenId) => socket.join("orden_" + ordenId));
-    socket.on('msg_p2p', async (data) => {
+    socket.on('join_trade', (ordenId) => socket.join(`trade_${ordenId}`));
+
+    socket.on('send_msg', async (data) => {
+        // Soporte para imágenes en el chat (base64)
+        const { ordenId, userId, message, image } = data;
         try {
-            await pool.query('INSERT INTO chats (orden_id, remitente_id, mensaje) VALUES ($1, $2, $3)', 
-                [data.ordenId, data.user_id, data.message]);
-            io.to("orden_" + data.ordenId).emit('update_chat', data);
-        } catch (e) { console.error(e); }
+            await pool.query(
+                'INSERT INTO chats (orden_id, remitente_id, mensaje, archivo_adjunto) VALUES ($1, $2, $3, $4)',
+                [ordenId, userId, message, image]
+            );
+            io.to(`trade_${ordenId}`).emit('new_msg', data);
+        } catch (e) { console.error("Error chat:", e); }
+    });
+
+    // Notificación de Pago Realizado
+    socket.on('notify_payment', async (ordenId) => {
+        await pool.query("UPDATE ordenes SET estatus = 'PAGADA' WHERE id = $1", [ordenId]);
+        io.to(`trade_${ordenId}`).emit('status_change', 'PAGADA');
     });
 });
 
+// --- 6. LANZAMIENTO ---
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 PLATINUM ENGINE TOTAL LIVE ON PORT: ${PORT}`);
+    console.log(`🚀 PLATINUM TOTAL SYSTEM ONLINE ON PORT ${PORT}`);
 });
