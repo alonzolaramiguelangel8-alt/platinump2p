@@ -1,1 +1,122 @@
+Aquí tienes el código completo para el Panel de Administración (admin.html). Este archivo es el "centro de mando" donde podrás ver las disputas y manejar los fondos como juez.
 
+Qué hacer: Abre tu archivo admin.html dentro de la carpeta public, borra todo y pega este código:
+
+HTML
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLATINUM | Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { background: #020617; color: #e2e8f0; }
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(34, 211, 238, 0.1); }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <header class="max-w-6xl mx-auto flex justify-between items-center mb-10">
+        <div>
+            <h1 class="text-3xl font-black text-cyan-400">PLATINUM <span class="text-white text-xl">ADMIN</span></h1>
+            <p class="text-slate-500 text-sm">Terminal de Arbitraje y Control</p>
+        </div>
+        <a href="/index.html" class="text-slate-400 hover:text-white text-sm">← Volver al Dashboard</a>
+    </header>
+
+    <main class="max-w-6xl mx-auto grid grid-cols-1 gap-8">
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="glass p-6 rounded-3xl">
+                <p class="text-xs font-bold text-cyan-500 uppercase">Órdenes en Disputa</p>
+                <h2 id="dispute-count" class="text-4xl font-black mt-2">0</h2>
+            </div>
+            <div class="glass p-6 rounded-3xl">
+                <p class="text-xs font-bold text-green-500 uppercase">Estado del Sistema</p>
+                <h2 class="text-2xl font-black mt-2 text-green-400">OPERATIVO</h2>
+            </div>
+        </div>
+
+        <div class="glass rounded-3xl p-8">
+            <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+                <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                Casos de Arbitraje Pendientes
+            </h3>
+
+            <div id="dispute-list" class="space-y-4">
+                <p class="text-slate-500 text-center py-10 italic">No hay disputas activas por ahora.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const user = JSON.parse(localStorage.getItem('user'));
+
+        // Seguridad: Si no es admin, fuera
+        if (!token || !user.isAdmin) {
+            alert("ACCESO DENEGADO");
+            window.location.href = '/index.html';
+        }
+
+        async function loadDisputes() {
+            try {
+                const res = await fetch('/api/admin/disputas', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const disputes = await res.json();
+                renderDisputes(disputes);
+            } catch (e) {
+                console.error("Error cargando disputas:", e);
+            }
+        }
+
+        function renderDisputes(disputes) {
+            const container = document.getElementById('dispute-list');
+            document.getElementById('dispute-count').innerText = disputes.length;
+
+            if (disputes.length === 0) return;
+
+            container.innerHTML = disputes.map(d => `
+                <div class="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div>
+                        <span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded">ID: ${d.id}</span>
+                        <h4 class="text-xl font-bold mt-2">${d.crypto_amount} USDT</h4>
+                        <p class="text-sm text-slate-400">Vendedor: ${d.seller_id} | Comprador: ${d.buyer_id}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="resolve('${d.id}', ${d.buyer_id})" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">LIBERAR A COMPRADOR</button>
+                        <button onclick="resolve('${d.id}', ${d.seller_id})" class="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">DEVOLVER A VENDEDOR</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function resolve(orderId, winnerId) {
+            if (!confirm("¿Confirmas esta decisión? Esta acción moverá los fondos de forma irreversible.")) return;
+
+            const res = await fetch('/api/admin/resolve-dispute', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ orderId, winnerId })
+            });
+
+            if (res.ok) {
+                alert("Decisión ejecutada con éxito.");
+                loadDisputes();
+            } else {
+                alert("Error al procesar la resolución.");
+            }
+        }
+
+        // Cargar al iniciar
+        loadDisputes();
+    </script>
+</body>
+</html>
