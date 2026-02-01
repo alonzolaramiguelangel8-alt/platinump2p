@@ -70,7 +70,7 @@ const initDB = async () => {
 
 // --- RUTAS DE SISTEMA ---
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.status(200).sendFile('index.html', { root: path.join(__dirname, 'public') });
 });
 
 // ACCESO DIOS (CORREGIDO)
