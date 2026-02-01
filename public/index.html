@@ -3,214 +3,613 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PLATINUM P2P | Global Terminal</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
+    <title>Platinum P2P | Venezuela</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
     <style>
-        :root { --neon: #00f2ff; --bg: #020617; }
-        body { background: var(--bg); color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
-        .font-cyber { font-family: 'Orbitron', sans-serif; }
-        .platinum-card { background: rgba(15, 23, 42, 0.6); border: 1px solid #1e293b; backdrop-filter: blur(12px); }
-        .neon-text { color: var(--neon); text-shadow: 0 0 10px rgba(0, 242, 255, 0.5); }
-        .neon-border { border: 1px solid var(--neon); box-shadow: 0 0 15px rgba(0, 242, 255, 0.2); }
-        .btn-primary { background: var(--neon); color: #000; font-weight: bold; transition: 0.3s; }
-        .btn-primary:hover { box-shadow: 0 0 20px var(--neon); transform: translateY(-2px); }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        /* --- ESTILOS "DARK CRYPTO" --- */
+        :root {
+            --bg-dark: #0b0e11;
+            --bg-card: #181a20;
+            --primary: #fcd535; /* Amarillo Crypto */
+            --text-main: #eaecef;
+            --text-muted: #848e9c;
+            --green: #0ecb81;
+            --red: #f6465d;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Utilidades */
+        .text-primary-c { color: var(--primary) !important; }
+        .bg-card { background-color: var(--bg-card); border-radius: 8px; }
+        .btn-primary-c { background-color: var(--primary); color: #000; font-weight: 600; border: none; }
+        .btn-primary-c:hover { background-color: #e5c12e; }
+        .btn-green { background-color: var(--green); color: #fff; border:none; }
+        .btn-red { background-color: var(--red); color: #fff; border:none; }
+        
+        /* Navegación */
+        .navbar { background-color: var(--bg-card); border-bottom: 1px solid #2b3139; }
+        .nav-link { color: var(--text-muted) !important; }
+        .nav-link.active { color: var(--primary) !important; font-weight: bold; }
+
+        /* Tablas P2P */
+        .table-dark-c { background-color: transparent; color: var(--text-main); }
+        .table-dark-c th { border-bottom: 1px solid #2b3139; color: var(--text-muted); font-weight: 400; }
+        .table-dark-c td { border-bottom: 1px solid #2b3139; vertical-align: middle; }
+        
+        /* Chat Room */
+        .chat-box { height: 400px; overflow-y: auto; background: #000; border: 1px solid #2b3139; padding: 15px; border-radius: 8px; }
+        .msg { margin-bottom: 10px; max-width: 80%; padding: 10px; border-radius: 10px; font-size: 0.9em; }
+        .msg-me { background-color: var(--primary); color: #000; margin-left: auto; border-bottom-right-radius: 0; }
+        .msg-other { background-color: #2b3139; color: #fff; margin-right: auto; border-bottom-left-radius: 0; }
+        .msg-system { text-align: center; color: var(--text-muted); font-size: 0.8em; width: 100%; max-width: 100%; }
+        .chat-img { max-width: 100%; border-radius: 5px; margin-top: 5px; cursor: pointer; }
+
+        /* Estados */
+        .status-badge { padding: 5px 10px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .st-PAID { background: rgba(252, 213, 53, 0.2); color: var(--primary); }
+        .st-COMPLETED { background: rgba(14, 203, 129, 0.2); color: var(--green); }
+        .st-CANCELLED { background: rgba(246, 70, 93, 0.2); color: var(--red); }
+
+        /* Ocultar secciones por defecto */
+        .view-section { display: none; }
+        .active-view { display: block; animation: fadeIn 0.3s; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<body>
 
-    <div id="auth-screen" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-6">
-        <div class="platinum-card p-8 rounded-3xl w-full max-w-md border-slate-800">
-            <h1 class="text-3xl font-cyber neon-text mb-8 text-center">PLATINUM ACCESS</h1>
-            
-            <div id="auth-forms" class="space-y-4">
-                <input id="auth-user" type="text" placeholder="Usuario o Email" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 outline-none focus:border-cyan-500">
-                <input id="auth-pass" type="password" placeholder="Contraseña" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 outline-none focus:border-cyan-500">
-                
-                <button onclick="ejecutarAuth('login')" class="w-full btn-primary py-4 rounded-xl mt-4">INGRESAR AL TERMINAL</button>
-                <button onclick="ejecutarAuth('registro')" class="w-full text-slate-400 text-sm hover:underline">¿No tienes cuenta? Regístrate aquí</button>
+    <nav class="navbar navbar-expand-lg py-3">
+        <div class="container">
+            <a class="navbar-brand text-primary-c fw-bold" href="#"><i class="fas fa-layer-group"></i> PLATINUM P2P</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+                <span class="navbar-toggler-icon bg-secondary"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navContent">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 auth-only" style="display:none;">
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="nav('p2p')">Mercado P2P</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="nav('orders')">Mis Órdenes</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="nav('wallet')">Billetera</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="nav('kyc')">Verificación KYC</a></li>
+                </ul>
+                <div class="d-flex">
+                    <div id="auth-buttons">
+                        <button class="btn btn-outline-light btn-sm me-2" onclick="nav('login')">Entrar</button>
+                        <button class="btn btn-primary-c btn-sm" onclick="nav('register')">Registro</button>
+                    </div>
+                    <div id="user-menu" class="auth-only dropdown" style="display:none;">
+                        <button class="btn btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" id="username-display">Usuario</button>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="#" onclick="logout()">Cerrar Sesión</a></li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+    </nav>
 
-    <div id="main-dashboard" class="hidden flex-1 flex flex-col">
-        <nav class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 sticky top-0 z-40 backdrop-blur-md">
-            <h1 class="text-xl font-cyber neon-text">PLATINUM <span class="text-white">P2P</span></h1>
-            <div class="flex items-center gap-6">
-                <div class="text-right">
-                    <p id="display-username" class="text-sm font-bold text-white uppercase tracking-widest">---</p>
-                    <p class="text-xs text-green-400 font-mono"><span id="display-balance">0.00</span> USDT</p>
+    <div class="container mt-4">
+
+        <div id="view-login" class="view-section active-view">
+            <div class="row justify-content-center">
+                <div class="col-md-5">
+                    <div class="bg-card p-4 mt-5">
+                        <h3 class="text-center mb-4">Iniciar Sesión</h3>
+                        <form onsubmit="handleLogin(event)">
+                            <div class="mb-3">
+                                <label>Email</label>
+                                <input type="email" id="login-email" class="form-control bg-dark text-white border-secondary" required>
+                            </div>
+                            <div class="mb-3">
+                                <label>Contraseña</label>
+                                <input type="password" id="login-pass" class="form-control bg-dark text-white border-secondary" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary-c w-100 py-2">Ingresar</button>
+                        </form>
+                    </div>
                 </div>
-                <button onclick="logout()" class="text-xs text-red-500 border border-red-950 px-2 py-1 rounded">SALIR</button>
             </div>
-        </nav>
+        </div>
 
-        <main class="max-w-7xl mx-auto w-full p-4 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            <div class="lg:col-span-8 space-y-6">
-                <div class="flex justify-between items-end">
-                    <div>
-                        <h2 class="text-2xl font-cyber">MERCADO ACTIVO</h2>
-                        <p class="text-slate-500 text-xs uppercase tracking-tighter">Escrow Protegido por Contratos Inteligentes</p>
+        <div id="view-register" class="view-section">
+            <div class="row justify-content-center">
+                <div class="col-md-5">
+                    <div class="bg-card p-4 mt-5">
+                        <h3 class="text-center mb-4">Crear Cuenta</h3>
+                        <form onsubmit="handleRegister(event)">
+                            <div class="mb-3">
+                                <label>Usuario</label>
+                                <input type="text" id="reg-user" class="form-control bg-dark text-white border-secondary" required>
+                            </div>
+                            <div class="mb-3">
+                                <label>Email</label>
+                                <input type="email" id="reg-email" class="form-control bg-dark text-white border-secondary" required>
+                            </div>
+                            <div class="mb-3">
+                                <label>Contraseña</label>
+                                <input type="password" id="reg-pass" class="form-control bg-dark text-white border-secondary" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary-c w-100 py-2">Registrarse</button>
+                        </form>
                     </div>
-                    <button onclick="document.getElementById('modal-orden').classList.remove('hidden')" class="btn-primary px-6 py-2 rounded-full text-sm">PUBLICAR ANUNCIO</button>
                 </div>
+            </div>
+        </div>
 
-                <div id="lista-ordenes" class="grid gap-4">
+        <div id="view-p2p" class="view-section">
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="btn-group">
+                        <button class="btn btn-success active" id="btn-tab-buy" onclick="switchP2PTab('BUY')">Quiero Comprar</button>
+                        <button class="btn btn-outline-danger" id="btn-tab-sell" onclick="switchP2PTab('SELL')">Quiero Vender</button>
                     </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button class="btn btn-outline-warning" onclick="nav('create-ad')"><i class="fas fa-plus"></i> Publicar Anuncio</button>
+                </div>
             </div>
 
-            <div class="lg:col-span-4">
-                <div class="platinum-card rounded-3xl h-[75vh] flex flex-col overflow-hidden sticky top-24">
-                    <div class="p-4 border-b border-slate-800 bg-slate-900/30 flex justify-between items-center">
-                        <span class="text-cyan-400 font-cyber text-xs">COMUNICACIÓN SEGURA</span>
-                        <span id="orden-info-chat" class="text-[10px] text-slate-500">ID: N/A</span>
-                    </div>
-                    
-                    <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-                        <div class="text-center py-10 opacity-20">
-                            <p>Selecciona una orden del mercado para iniciar la negociación directa.</p>
+            <div class="bg-card p-3 mb-3 d-flex gap-3 align-items-center">
+                <label>Monto (VES):</label>
+                <input type="number" class="form-control form-control-sm bg-dark text-white" style="width: 150px;" placeholder="Ej: 1000">
+                <label>Banco:</label>
+                <select class="form-select form-select-sm bg-dark text-white" style="width: 200px;" id="filter-bank">
+                    <option value="">Todos</option>
+                    <option value="PAGO_MOVIL">Pago Móvil</option>
+                    <option value="BANESCO">Banesco</option>
+                    <option value="MERCANTIL">Mercantil</option>
+                    <option value="BANCO_DE_VENEZUELA">Banco de Venezuela</option>
+                </select>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-dark-c">
+                    <thead>
+                        <tr>
+                            <th>Comerciante</th>
+                            <th>Precio (VES)</th>
+                            <th>Límites / Disponible</th>
+                            <th>Pago</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="p2p-list">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-trade" class="view-section">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="bg-card p-3 mb-3">
+                        <h5 class="text-primary-c">Orden #<span id="trade-id-display"></span></h5>
+                        <p class="mb-1 text-muted">Estás comprando</p>
+                        <h2 class="mb-3"><span id="trade-crypto-amount">0.00</span> USDT</h2>
+                        <hr style="border-color: #2b3139;">
+                        <div class="d-flex justify-content-between">
+                            <span>Monto a pagar:</span>
+                            <strong class="text-success"><span id="trade-fiat-amount">0.00</span> VES</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2">
+                            <span>Precio unitario:</span>
+                            <span><span id="trade-price">0.00</span> VES</span>
                         </div>
                     </div>
 
-                    <div class="p-4 bg-slate-900/50 flex gap-2">
-                        <input id="chat-input" type="text" placeholder="Enviar mensaje..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 outline-none focus:border-cyan-500">
-                        <button onclick="enviarMensaje()" class="bg-cyan-500 text-black p-3 rounded-xl hover:bg-white transition">🚀</button>
+                    <div class="bg-card p-3" id="payment-details-box">
+                        <h6 class="text-white mb-3">Datos de Pago del Vendedor</h6>
+                        <div id="bank-data-content" class="text-small text-muted" style="font-family: monospace;">
+                            </div>
+                        <hr>
+                        <div id="action-buttons">
+                            </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="bg-card p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="m-0">Chat con la contraparte</h5>
+                            <span class="badge bg-warning text-dark">Atención 24/7</span>
+                        </div>
+                        
+                        <div id="chat-box" class="chat-box">
+                            </div>
+
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-secondary" onclick="document.getElementById('file-upload').click()">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                            <input type="file" id="file-upload" hidden accept="image/*" onchange="uploadImage()">
+                            <input type="text" id="chat-input" class="form-control bg-dark text-white border-secondary" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter') sendMessage()">
+                            <button class="btn btn-primary-c" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </main>
-    </div>
+        </div>
 
-    <div id="modal-orden" class="hidden fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
-        <div class="platinum-card p-8 rounded-[40px] w-full max-w-md border-cyan-500/20">
-            <h2 class="text-xl font-cyber mb-6 text-center">CREAR OFERTA P2P</h2>
-            <div class="space-y-4 text-sm">
-                <input id="orden-monto" type="number" placeholder="Cantidad USDT (Min 10)" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 outline-none">
-                <input id="orden-precio" type="number" placeholder="Precio Total Fiat" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 outline-none">
-                <select id="orden-metodo" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 outline-none">
-                    <option value="Pago Móvil">Pago Móvil</option>
-                    <option value="Zelle">Zelle</option>
-                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
-                </select>
-                <div class="grid grid-cols-2 gap-4 pt-4">
-                    <button onclick="document.getElementById('modal-orden').classList.add('hidden')" class="text-slate-500 py-3">CANCELAR</button>
-                    <button onclick="confirmarOrden()" class="btn-primary py-3 rounded-2xl">POSTEAR</button>
-                </div>
+        <div id="view-kyc" class="view-section">
+            <h3 class="mb-4">Verificación de Identidad (Venezuela)</h3>
+            <div class="bg-card p-4">
+                <form onsubmit="submitKYC(event)">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label>Foto Cédula (Frente)</label>
+                            <input type="file" name="front" class="form-control bg-dark text-white" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label>Selfie sosteniendo Cédula</label>
+                            <input type="file" name="selfie" class="form-control bg-dark text-white" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary-c">Enviar Documentos</button>
+                </form>
             </div>
         </div>
-    </div>
 
-    <script>
-        const socket = io();
-        let user = JSON.parse(localStorage.getItem('platinum_user'));
-        let ordenActiva = null;
+    </div> <script>
+        const API_URL = 'http://localhost:3000/api'; // Cambiar si el backend está en otro lado
+        const SOCKET_URL = 'http://localhost:3000';
+        
+        let token = localStorage.getItem('token');
+        let currentUser = null;
+        let currentOrderId = null;
+        let socket = null;
 
-        if(user) { iniciarDashboard(); }
-
-        // --- AUTH LOGIC ---
-        async function ejecutarAuth(tipo) {
-            const username = document.getElementById('auth-user').value;
-            const password = document.getElementById('auth-pass').value;
-            
-            const res = await fetch('/' + tipo, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ username, email: username, password })
-            });
-            const data = await res.json();
-
-            if(data.success) {
-                user = data.user || { username, id: data.id };
-                localStorage.setItem('platinum_user', JSON.stringify(user));
-                location.reload();
+        // --- INICIALIZACIÓN ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (token) {
+                initSocket();
+                nav('p2p');
+                fetchAds('SELL'); // Por defecto ver gente vendiendo (Yo compro)
             } else {
-                alert("Error: " + (data.error || "Credenciales incorrectas"));
+                nav('login');
+            }
+        });
+
+        // --- NAVEGACIÓN SIMPLE ---
+        function nav(viewId) {
+            // Ocultar todas las vistas
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active-view'));
+            // Mostrar la deseada
+            const target = document.getElementById(`view-${viewId}`);
+            if (target) target.classList.add('active-view');
+
+            // Toggle Navbar
+            const authElements = document.querySelectorAll('.auth-only');
+            const guestElements = document.getElementById('auth-buttons');
+            
+            if (token) {
+                authElements.forEach(el => el.style.display = 'block');
+                guestElements.style.display = 'none';
+            } else {
+                authElements.forEach(el => el.style.display = 'none');
+                guestElements.style.display = 'block';
             }
         }
 
-        function iniciarDashboard() {
-            document.getElementById('auth-screen').classList.add('hidden');
-            document.getElementById('main-dashboard').classList.remove('hidden');
-            document.getElementById('display-username').innerText = user.username;
-            document.getElementById('display-balance').innerText = parseFloat(user.balance_usdt || 0).toFixed(2);
-            cargarMercado();
+        function logout() {
+            localStorage.removeItem('token');
+            token = null;
+            window.location.reload();
         }
 
-        function logout() { localStorage.clear(); location.reload(); }
+        // --- AUTH API ---
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-pass').value;
 
-        // --- MARKET LOGIC ---
-        async function cargarMercado() {
-            const res = await fetch('/api/mercado');
+            try {
+                const res = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                
+                if (data.token) {
+                    token = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('token', token);
+                    initSocket();
+                    nav('p2p');
+                    Swal.fire('Éxito', 'Bienvenido a Platinum P2P', 'success');
+                } else {
+                    Swal.fire('Error', data.error, 'error');
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const username = document.getElementById('reg-user').value;
+            const email = document.getElementById('reg-email').value;
+            const password = document.getElementById('reg-pass').value;
+
+            const res = await fetch(`${API_URL}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password })
+            });
             const data = await res.json();
-            const container = document.getElementById('lista-ordenes');
+            if(data.success) {
+                Swal.fire('Registro Completo', 'Ahora inicia sesión', 'success');
+                nav('login');
+            }
+        }
+
+        // --- SOCKET.IO ---
+        function initSocket() {
+            socket = io(SOCKET_URL, {
+                auth: { token }
+            });
+
+            socket.on('connect', () => console.log("🟢 Conectado al Socket"));
+            
+            socket.on('new_message', (msg) => {
+                if (msg.order_id === currentOrderId || currentOrderId === `trade_${msg.order_id}`) { // Ajuste de lógica
+                    appendMessage(msg);
+                }
+            });
+
+            socket.on('order_update', (data) => {
+                Swal.fire('Actualización de Orden', data.message || `Nuevo estado: ${data.status}`, 'info');
+                // Recargar UI de botones
+                loadTradeUI(data.status); 
+            });
+        }
+
+        // --- MERCADO P2P ---
+        let currentTab = 'BUY'; // BUY significa "Yo quiero comprar", veo anuncios de VENTA (SELL)
+
+        function switchP2PTab(type) {
+            currentTab = type;
+            // Visual Toggle
+            if (type === 'BUY') {
+                document.getElementById('btn-tab-buy').classList.add('active', 'btn-success');
+                document.getElementById('btn-tab-buy').classList.remove('btn-outline-success');
+                document.getElementById('btn-tab-sell').classList.remove('active', 'btn-danger');
+                document.getElementById('btn-tab-sell').classList.add('btn-outline-danger');
+                fetchAds('SELL'); // Busco gente vendiendo
+            } else {
+                document.getElementById('btn-tab-sell').classList.add('active', 'btn-danger');
+                document.getElementById('btn-tab-sell').classList.remove('btn-outline-danger');
+                document.getElementById('btn-tab-buy').classList.remove('active', 'btn-success');
+                document.getElementById('btn-tab-buy').classList.add('btn-outline-success');
+                fetchAds('BUY'); // Busco gente comprando
+            }
+        }
+
+        async function fetchAds(type) {
+            const res = await fetch(`${API_URL}/ads?type=${type}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const ads = await res.json();
+            const list = document.getElementById('p2p-list');
+            list.innerHTML = '';
+
+            ads.forEach(ad => {
+                // Parse payment methods
+                let banks = "Bancos Varios";
+                try {
+                     // Aquí simplificamos, en producción se mapean los IDs a nombres
+                     banks = JSON.parse(ad.payment_methods).length + " Métodos"; 
+                } catch(e){}
+
+                const btnClass = currentTab === 'BUY' ? 'btn-success' : 'btn-danger';
+                const actionText = currentTab === 'BUY' ? 'Comprar USDT' : 'Vender USDT';
+
+                list.innerHTML += `
+                    <tr>
+                        <td>
+                            <div class="fw-bold text-primary-c">${ad.username}</div>
+                            <small class="text-muted">${ad.completion_rate}% Completado</small>
+                        </td>
+                        <td><div class="fs-5 fw-bold">${parseFloat(ad.price).toFixed(2)} <span class="text-muted fs-6">VES</span></div></td>
+                        <td>
+                            <div>Disp: ${parseFloat(ad.total_amount).toFixed(2)} USDT</div>
+                            <small class="text-muted">Lim: ${ad.min_limit} - ${ad.max_limit} VES</small>
+                        </td>
+                        <td><span class="badge bg-secondary">${banks}</span></td>
+                        <td>
+                            <button class="btn ${btnClass} btn-sm" onclick="initiateTrade(${ad.id}, '${ad.price}', '${ad.min_limit}', '${ad.max_limit}', '${ad.type}')">
+                                ${actionText}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        // --- CREAR ORDEN (MODAL/PROMPT SIMPLIFICADO) ---
+        async function initiateTrade(adId, price, min, max, type) {
+            const { value: amount } = await Swal.fire({
+                title: type === 'SELL' ? 'Comprar USDT' : 'Vender USDT',
+                input: 'number',
+                inputLabel: `Ingresa monto en VES (Entre ${min} y ${max})`,
+                inputPlaceholder: 'Monto en Bolívares'
+            });
+
+            if (amount) {
+                try {
+                    const res = await fetch(`${API_URL}/orders/create`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ ad_id: adId, fiat_amount: amount })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        openTradeRoom(data.orderId);
+                    } else {
+                        Swal.fire('Error', data.error, 'error');
+                    }
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        // --- TRADE ROOM & CHAT ---
+        async function openTradeRoom(orderId) {
+            currentOrderId = orderId;
+            nav('trade');
+            
+            // Unirse al socket
+            socket.emit('join_order', orderId);
+            
+            // Cargar mensajes previos (No implementado en API para brevedad, pero necesario)
+            document.getElementById('chat-box').innerHTML = ''; // Limpiar chat
+            
+            // Cargar detalles de orden (Simulado fetch a endpoint de detalle)
+            // En producción: fetch(`${API_URL}/orders/${orderId}`)
+            document.getElementById('trade-id-display').innerText = orderId;
+            
+            // Renderizar datos dummy para visualizar
+            document.getElementById('trade-fiat-amount').innerText = "Cargando...";
+            
+            // Simular carga de botones inicial
+            loadTradeUI('CREATED'); 
+        }
+
+        function loadTradeUI(status) {
+            const container = document.getElementById('action-buttons');
             container.innerHTML = '';
 
-            data.forEach(o => {
-                const card = `
-                <div class="platinum-card p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center group hover:neon-border transition duration-500">
-                    <div class="flex items-center gap-4">
-                        <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center font-bold text-cyan-400">
-                            ${o.vendedor_nombre[0].toUpperCase()}
-                        </div>
-                        <div>
-                            <p class="text-xs text-slate-500 uppercase font-bold">Vendedor: ${o.vendedor_nombre} (${o.reputacion}⭐)</p>
-                            <h3 class="text-2xl font-cyber">${o.monto_usdt} <span class="text-xs font-sans text-cyan-400">USDT</span></h3>
-                        </div>
-                    </div>
-                    <div class="text-center md:text-right mt-4 md:mt-0">
-                        <p class="text-2xl text-green-400 font-bold">${o.monto_bs} <span class="text-xs uppercase">Fiat</span></p>
-                        <p class="text-[10px] text-slate-500 mb-2">${o.metodo_pago || 'Pago Rápido'}</p>
-                        <button onclick="negociar(${o.id})" class="bg-white text-black text-xs font-black px-8 py-2 rounded-full hover:bg-cyan-400 transition">INICIAR COMPRA</button>
-                    </div>
-                </div>`;
-                container.innerHTML += card;
-            });
+            // LOGICA DE BOTONES SEGÚN ROL Y ESTADO
+            // Nota: Aquí necesitaríamos saber si soy comprador o vendedor en esta orden específica.
+            // Para simplificar el demo, pondré ambos botones (En prod se filtra por ID de usuario)
+            
+            if (status === 'CREATED') {
+                container.innerHTML += `
+                    <div class="alert alert-warning">Esperando pago...</div>
+                    <button class="btn btn-warning w-100 mb-2" onclick="markPaid()">🔥 He Pagado (Soy Comprador)</button>
+                    <button class="btn btn-outline-danger w-100" onclick="cancelOrder()">Cancelar</button>
+                `;
+            } else if (status === 'PAID') {
+                container.innerHTML += `
+                    <div class="alert alert-info">Pago Marcado. Verificando...</div>
+                    <button class="btn btn-success w-100 mb-2" onclick="releaseFunds()">✅ Liberar USDT (Soy Vendedor)</button>
+                    <button class="btn btn-outline-secondary w-100">Apelar / Disputa</button>
+                `;
+            } else if (status === 'COMPLETED') {
+                container.innerHTML = `<div class="alert alert-success">✅ ORDEN FINALIZADA</div>`;
+            } else if (status === 'CANCELLED') {
+                container.innerHTML = `<div class="alert alert-danger">❌ ORDEN CANCELADA</div>`;
+            }
         }
 
-        async function confirmarOrden() {
-            const amount = document.getElementById('orden-monto').value;
-            const price = document.getElementById('orden-precio').value;
-            const metodo = document.getElementById('orden-metodo').value;
-
-            const res = await fetch('/crear-orden', {
+        // Acciones de Orden
+        async function markPaid() {
+            await fetch(`${API_URL}/orders/${currentOrderId}/pay`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ seller_id: user.id, amount, price, metodo })
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-            if(res.ok) { location.reload(); } else { alert("Saldo insuficiente en Escrow"); }
         }
 
-        // --- CHAT LOGIC ---
-        function negociar(id) {
-            ordenActiva = id;
-            document.getElementById('orden-info-chat').innerText = "ORDEN ID: #" + id;
-            document.getElementById('chat-box').innerHTML = '<p class="text-center text-cyan-500 text-[10px] animate-pulse">CANAL ENCRIPTADO ABIERTO</p>';
-            socket.emit('unirse_p2p', id);
+        async function releaseFunds() {
+            const res = await fetch(`${API_URL}/orders/${currentOrderId}/release`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if(data.success) Swal.fire('Liberado', 'Los fondos han sido transferidos', 'success');
         }
 
-        function enviarMensaje() {
-            const msg = document.getElementById('chat-input').value;
-            if(!ordenActiva || !msg) return;
-            socket.emit('msg_p2p', { ordenId: ordenActiva, user_id: user.id, username: user.username, message: msg });
-            document.getElementById('chat-input').value = '';
+        async function cancelOrder() {
+            await fetch(`${API_URL}/orders/${currentOrderId}/cancel`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
         }
 
-        socket.on('update_chat', (data) => {
-            const isMe = data.user_id === user.id;
-            const chatBox = document.getElementById('chat-box');
-            chatBox.innerHTML += `
-                <div class="flex ${isMe ? 'justify-end' : 'justify-start'}">
-                    <div class="p-3 rounded-2xl max-w-[85%] ${isMe ? 'bg-cyan-600 text-black' : 'bg-slate-800 text-white'}">
-                        <p class="text-[9px] font-bold opacity-50">${data.username}</p>
-                        <p>${data.message}</p>
-                    </div>
-                </div>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
-        });
+        // Chat Funciones
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value;
+            if (!message) return;
+
+            socket.emit('send_message', {
+                orderId: currentOrderId,
+                message: message,
+                imageUrl: null
+            });
+            input.value = '';
+        }
+
+        async function uploadImage() {
+            const input = document.getElementById('file-upload');
+            const file = input.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            const res = await fetch(`${API_URL}/chat/upload`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            const data = await res.json();
+            
+            // Enviar mensaje con la imagen adjunta
+            socket.emit('send_message', {
+                orderId: currentOrderId,
+                message: "Adjunto Comprobante:",
+                imageUrl: data.url
+            });
+        }
+
+        function appendMessage(msg) {
+            const box = document.getElementById('chat-box');
+            // Determinar si soy yo o el otro (Necesitamos user id en storage)
+            // Asumiremos que si viene del socket y no tengo ID, es 'other'
+            // En producción decodificar JWT para saber mi ID
+            
+            const isMe = false; // Simplificación
+            const typeClass = msg.is_system_message ? 'msg-system' : (isMe ? 'msg-me' : 'msg-other');
+            
+            let content = `<div>${msg.message}</div>`;
+            if (msg.image_url) {
+                content += `<img src="http://localhost:3000${msg.image_url}" class="chat-img" onclick="window.open(this.src)">`;
+            }
+
+            box.innerHTML += `<div class="msg ${typeClass}">${content}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // --- KYC ---
+        async function submitKYC(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            const res = await fetch(`${API_URL}/kyc/submit`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            
+            const data = await res.json();
+            if(data.success) {
+                Swal.fire('Enviado', 'Documentos en revisión', 'success');
+                nav('p2p');
+            }
+        }
+
     </script>
 </body>
 </html>
