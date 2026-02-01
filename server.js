@@ -68,24 +68,46 @@ const initDB = async () => {
     } catch (err) { console.error("❌ DB Init Error:", err.message); }
 };
 
-// --- RUTAS DE SISTEMA ---
+// --- 2. RUTAS DE ACCESO Y ADMIN ---
+
+// CORREGIDO: Ahora cierra bien y usa la ruta de Express 5
 app.get('/', (req, res) => {
-    res.status(200).sendFile('index.html', { root: path.join(__dirname, 'public') });
+    res.sendFile('index.html', { root: path.join(__dirname, 'public') });
 });
 
-// ACCESO DIOS (CORREGIDO)
+// CORREGIDO: Se agregó 'async', se cerró el bloque anterior y se arregló el HTML del response
 app.get('/admin-power-up', async (req, res) => {
     try {
         const miEmail = 'alonzolaramiguelangel@gmail.com';
-        const result = await pool.query("UPDATE users SET balance_usdt = 10000, is_admin = true WHERE email = $1 OR username = $1 RETURNING *", [miEmail]);
-        if(result.rowCount > 0) {
-            res.send("<div style='background:#000;color:#0ff;padding:50px;text-align:center;font-family:mono;'><h1>💎 ACCESO ELITE ACTIVADO</h1><p>Saldo: 10,000 USDT inyectados.</p><a href='/' style='color:#fff;'>IR AL DASHBOARD</a></div>");
-        } else {
-            res.send("<h1>⚠️ Usuario no encontrado. Regístrate primero.</h1>");
-        }
-    } catch (err) { res.status(500).send("Error de inyección"); }
-});
+        const query = `
+            UPDATE users 
+            SET balance_usdt = 10000, is_admin = true, kyc_status = 'verificado' 
+            WHERE email = $1 OR username = $1 
+            RETURNING *`;
+        
+        const result = await pool.query(query, [miEmail]);
 
+        if (result.rowCount > 0) {
+            res.send(`
+                <div style="background:#000; color:#0ff; padding:50px; text-align:center; font-family:sans-serif; border:5px solid #0ff;">
+                    <h1>✅ ACCESO NIVEL DIOS ACTIVADO</h1>
+                    <p>Usuario: <b>${miEmail}</b> actualizado con 10,000 USDT.</p>
+                    <a href="/" style="color:#fff; border:1px solid #fff; padding:10px; text-decoration:none;">VOLVER AL MERCADO</a>
+                </div>
+            `);
+        } else {
+            res.send(`
+                <div style="text-align:center; padding:50px;">
+                    <h1>⚠️ Error: Usuario no encontrado.</h1>
+                    <p>Regístrate primero en la app con el correo: ${miEmail}</p>
+                </div>
+            `);
+        }
+    } catch (err) {
+        console.error("Error en admin-route:", err.message);
+        res.status(500).send("Error interno: " + err.message);
+    }
+});
 // --- GESTIÓN DE USUARIOS ---
 app.post('/registro', async (req, res) => {
     const { username, email, password } = req.body;
