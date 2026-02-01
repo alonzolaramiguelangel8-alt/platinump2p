@@ -1,157 +1,216 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
-const { Pool } = require('pg');
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLATINUM P2P | Global Terminal</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --neon: #00f2ff; --bg: #020617; }
+        body { background: var(--bg); color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .font-cyber { font-family: 'Orbitron', sans-serif; }
+        .platinum-card { background: rgba(15, 23, 42, 0.6); border: 1px solid #1e293b; backdrop-filter: blur(12px); }
+        .neon-text { color: var(--neon); text-shadow: 0 0 10px rgba(0, 242, 255, 0.5); }
+        .neon-border { border: 1px solid var(--neon); box-shadow: 0 0 15px rgba(0, 242, 255, 0.2); }
+        .btn-primary { background: var(--neon); color: #000; font-weight: bold; transition: 0.3s; }
+        .btn-primary:hover { box-shadow: 0 0 20px var(--neon); transform: translateY(-2px); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+    <div id="auth-screen" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-6">
+        <div class="platinum-card p-8 rounded-3xl w-full max-w-md border-slate-800">
+            <h1 class="text-3xl font-cyber neon-text mb-8 text-center">PLATINUM ACCESS</h1>
+            
+            <div id="auth-forms" class="space-y-4">
+                <input id="auth-user" type="text" placeholder="Usuario o Email" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 outline-none focus:border-cyan-500">
+                <input id="auth-pass" type="password" placeholder="Contraseña" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 outline-none focus:border-cyan-500">
+                
+                <button onclick="ejecutarAuth('login')" class="w-full btn-primary py-4 rounded-xl mt-4">INGRESAR AL TERMINAL</button>
+                <button onclick="ejecutarAuth('registro')" class="w-full text-slate-400 text-sm hover:underline">¿No tienes cuenta? Regístrate aquí</button>
+            </div>
+        </div>
+    </div>
 
-// MIDDLEWARES
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
+    <div id="main-dashboard" class="hidden flex-1 flex flex-col">
+        <nav class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 sticky top-0 z-40 backdrop-blur-md">
+            <h1 class="text-xl font-cyber neon-text">PLATINUM <span class="text-white">P2P</span></h1>
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <p id="display-username" class="text-sm font-bold text-white uppercase tracking-widest">---</p>
+                    <p class="text-xs text-green-400 font-mono"><span id="display-balance">0.00</span> USDT</p>
+                </div>
+                <button onclick="logout()" class="text-xs text-red-500 border border-red-950 px-2 py-1 rounded">SALIR</button>
+            </div>
+        </nav>
 
-// CONEXIÓN A BASE DE DATOS
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-});
+        <main class="max-w-7xl mx-auto w-full p-4 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-8 space-y-6">
+                <div class="flex justify-between items-end">
+                    <div>
+                        <h2 class="text-2xl font-cyber">MERCADO ACTIVO</h2>
+                        <p class="text-slate-500 text-xs uppercase tracking-tighter">Escrow Protegido por Contratos Inteligentes</p>
+                    </div>
+                    <button onclick="document.getElementById('modal-orden').classList.remove('hidden')" class="btn-primary px-6 py-2 rounded-full text-sm">PUBLICAR ANUNCIO</button>
+                </div>
 
-// --- 1. INICIALIZACIÓN DE TABLAS (REINICIO LIMPIO) ---
-const initDB = async () => {
-    try {
-        // Borramos para actualizar estructura si es necesario
-        await pool.query('DROP TABLE IF EXISTS ordenes CASCADE;');
-        await pool.query('DROP TABLE IF EXISTS users CASCADE;');
+                <div id="lista-ordenes" class="grid gap-4">
+                    </div>
+            </div>
 
-        // Tabla de Usuarios
-        await pool.query(`
-            CREATE TABLE users (
-                id SERIAL PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                balance_usdt DECIMAL DEFAULT 0,
-                is_admin BOOLEAN DEFAULT false,
-                kyc_status TEXT DEFAULT 'verificado'
-            );
-        `);
+            <div class="lg:col-span-4">
+                <div class="platinum-card rounded-3xl h-[75vh] flex flex-col overflow-hidden sticky top-24">
+                    <div class="p-4 border-b border-slate-800 bg-slate-900/30 flex justify-between items-center">
+                        <span class="text-cyan-400 font-cyber text-xs">COMUNICACIÓN SEGURA</span>
+                        <span id="orden-info-chat" class="text-[10px] text-slate-500">ID: N/A</span>
+                    </div>
+                    
+                    <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                        <div class="text-center py-10 opacity-20">
+                            <p>Selecciona una orden del mercado para iniciar la negociación directa.</p>
+                        </div>
+                    </div>
 
-        // Tabla de Mercado P2P
-        await pool.query(`
-            CREATE TABLE ordenes (
-                id SERIAL PRIMARY KEY,
-                vendedor_id INTEGER REFERENCES users(id),
-                comprador_id INTEGER REFERENCES users(id),
-                monto_usdt DECIMAL NOT NULL,
-                monto_bs DECIMAL NOT NULL,
-                estatus TEXT DEFAULT 'ABIERTA',
-                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        console.log("✅ PLATINUM DB: Todo el sistema (Usuarios y Mercado) está listo.");
-    } catch (err) {
-        console.error("❌ Error DB:", err.message);
-    }
-};
-initDB();
+                    <div class="p-4 bg-slate-900/50 flex gap-2">
+                        <input id="chat-input" type="text" placeholder="Enviar mensaje..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 outline-none focus:border-cyan-500">
+                        <button onclick="enviarMensaje()" class="bg-cyan-500 text-black p-3 rounded-xl hover:bg-white transition">🚀</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
 
-// --- 2. RUTAS DE ACCESO Y ADMIN ---
+    <div id="modal-orden" class="hidden fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
+        <div class="platinum-card p-8 rounded-[40px] w-full max-w-md border-cyan-500/20">
+            <h2 class="text-xl font-cyber mb-6 text-center">CREAR OFERTA P2P</h2>
+            <div class="space-y-4 text-sm">
+                <input id="orden-monto" type="number" placeholder="Cantidad USDT (Min 10)" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 outline-none">
+                <input id="orden-precio" type="number" placeholder="Precio Total Fiat" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 outline-none">
+                <select id="orden-metodo" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 outline-none">
+                    <option value="Pago Móvil">Pago Móvil</option>
+                    <option value="Zelle">Zelle</option>
+                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                </select>
+                <div class="grid grid-cols-2 gap-4 pt-4">
+                    <button onclick="document.getElementById('modal-orden').classList.add('hidden')" class="text-slate-500 py-3">CANCELAR</button>
+                    <button onclick="confirmarOrden()" class="btn-primary py-3 rounded-2xl">POSTEAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-// TU CÓDIGO ACTUAL (ERROR):
-app.get('/', (req, res) => {
-   res.sendFile(path.join(__dirname, 'public', 'index.html'));
-// <--- AQUÍ FALTA EL CIERRE });
-app.get('/admin-power-up', async (req, res) => { ...
+    <script>
+        const socket = io();
+        let user = JSON.parse(localStorage.getItem('platinum_user'));
+        let ordenActiva = null;
 
-        const miEmail = 'alonzolaramiguelangel@gmail.com';
-        const query = `
-            UPDATE users 
-            SET balance_usdt = 10000, is_admin = true, kyc_status = 'verificado' 
-            WHERE email = $1 OR username = $1 
-            RETURNING *`;
-        const result = await pool.query(query, [miEmail]);
-        if (result.rowCount > 0) {
-            res.send("<div style='text-align:center;padding:50px;font-family:sans-serif;'><h1>✅ ACCESO NIVEL DIOS ACTIVADO</h1><p>Usuario: " + miEmail + " actualizado.</p><a href='/'>VOLVER AL MERCADO</a></div>");
-        } else {
-            res.send("<h1>⚠️ Error: Usuario no encontrado. Regístrate primero en la app.</h1>");
+        if(user) { iniciarDashboard(); }
+
+        // --- AUTH LOGIC ---
+        async function ejecutarAuth(tipo) {
+            const username = document.getElementById('auth-user').value;
+            const password = document.getElementById('auth-pass').value;
+            
+            const res = await fetch('/' + tipo, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username, email: username, password })
+            });
+            const data = await res.json();
+
+            if(data.success) {
+                user = data.user || { username, id: data.id };
+                localStorage.setItem('platinum_user', JSON.stringify(user));
+                location.reload();
+            } else {
+                alert("Error: " + (data.error || "Credenciales incorrectas"));
+            }
         }
-    } catch (err) { res.status(500).send(err.message); }
-});
 
-app.post('/registro', async (req, res) => {
-    const { username, email, password } = req.body;
-    try {
-        await pool.query(
-            'INSERT INTO users (username, email, password, balance_usdt) VALUES ($1, $2, $3, 0)', 
-            [username, email, password]
-        );
-        res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, error: "Usuario o correo ya existe." });
-    }
-});
-
-app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        const r = await pool.query('SELECT * FROM users WHERE (username = $1 OR email = $1) AND password = $2', [username, password]);
-        if (r.rows.length > 0) res.json({ success: true, user: r.rows[0] });
-        else res.status(401).json({ success: false, message: "Credenciales inválidas" });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// --- 3. RUTAS DEL MERCADO P2P ---
-
-app.get('/api/mercado', async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT o.*, u.username 
-            FROM ordenes o 
-            JOIN users u ON o.vendedor_id = u.id 
-            WHERE o.estatus = 'ABIERTA' 
-            ORDER BY o.fecha_creacion DESC
-        `);
-        res.json(result.rows);
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/crear-orden', async (req, res) => {
-    const { seller_id, amount, price } = req.body;
-    try {
-        const user = await pool.query('SELECT balance_usdt FROM users WHERE id = $1', [seller_id]);
-        if (parseFloat(user.rows[0].balance_usdt) < parseFloat(amount)) {
-            return res.status(400).json({ error: "Saldo insuficiente" });
+        function iniciarDashboard() {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('main-dashboard').classList.remove('hidden');
+            document.getElementById('display-username').innerText = user.username;
+            document.getElementById('display-balance').innerText = parseFloat(user.balance_usdt || 0).toFixed(2);
+            cargarMercado();
         }
-        await pool.query('UPDATE users SET balance_usdt = balance_usdt - $1 WHERE id = $2', [amount, seller_id]);
-        await pool.query(
-            'INSERT INTO ordenes (vendedor_id, monto_usdt, monto_bs, estatus) VALUES ($1, $2, $3, $4)',
-            [seller_id, amount, price, 'ABIERTA']
-        );
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
-app.post('/liberar-fondos', async (req, res) => {
-    const { ordenId, compradorId, monto } = req.body;
-    try {
-        await pool.query('UPDATE users SET balance_usdt = balance_usdt + $1 WHERE id = $2', [monto, compradorId]);
-        await pool.query("UPDATE ordenes SET estatus = 'FINALIZADA' WHERE id = $1", [ordenId]);
-        io.to("orden_" + ordenId).emit('finalizado');
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
+        function logout() { localStorage.clear(); location.reload(); }
 
-// --- 4. SOCKETS (CHAT EN VIVO) ---
-io.on('connection', (socket) => {
-    socket.on('unirse_p2p', (id) => socket.join("orden_" + id));
-    socket.on('msg_p2p', (data) => {
-        io.to("orden_" + data.ordenId).emit('update_chat', data);
-    });
-});
+        // --- MARKET LOGIC ---
+        async function cargarMercado() {
+            const res = await fetch('/api/mercado');
+            const data = await res.json();
+            const container = document.getElementById('lista-ordenes');
+            container.innerHTML = '';
 
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 PLATINUM SERVER LIVE ON PORT ${PORT}`));
+            data.forEach(o => {
+                const card = `
+                <div class="platinum-card p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center group hover:neon-border transition duration-500">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center font-bold text-cyan-400">
+                            ${o.vendedor_nombre[0].toUpperCase()}
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 uppercase font-bold">Vendedor: ${o.vendedor_nombre} (${o.reputacion}⭐)</p>
+                            <h3 class="text-2xl font-cyber">${o.monto_usdt} <span class="text-xs font-sans text-cyan-400">USDT</span></h3>
+                        </div>
+                    </div>
+                    <div class="text-center md:text-right mt-4 md:mt-0">
+                        <p class="text-2xl text-green-400 font-bold">${o.monto_bs} <span class="text-xs uppercase">Fiat</span></p>
+                        <p class="text-[10px] text-slate-500 mb-2">${o.metodo_pago || 'Pago Rápido'}</p>
+                        <button onclick="negociar(${o.id})" class="bg-white text-black text-xs font-black px-8 py-2 rounded-full hover:bg-cyan-400 transition">INICIAR COMPRA</button>
+                    </div>
+                </div>`;
+                container.innerHTML += card;
+            });
+        }
+
+        async function confirmarOrden() {
+            const amount = document.getElementById('orden-monto').value;
+            const price = document.getElementById('orden-precio').value;
+            const metodo = document.getElementById('orden-metodo').value;
+
+            const res = await fetch('/crear-orden', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ seller_id: user.id, amount, price, metodo })
+            });
+            if(res.ok) { location.reload(); } else { alert("Saldo insuficiente en Escrow"); }
+        }
+
+        // --- CHAT LOGIC ---
+        function negociar(id) {
+            ordenActiva = id;
+            document.getElementById('orden-info-chat').innerText = "ORDEN ID: #" + id;
+            document.getElementById('chat-box').innerHTML = '<p class="text-center text-cyan-500 text-[10px] animate-pulse">CANAL ENCRIPTADO ABIERTO</p>';
+            socket.emit('unirse_p2p', id);
+        }
+
+        function enviarMensaje() {
+            const msg = document.getElementById('chat-input').value;
+            if(!ordenActiva || !msg) return;
+            socket.emit('msg_p2p', { ordenId: ordenActiva, user_id: user.id, username: user.username, message: msg });
+            document.getElementById('chat-input').value = '';
+        }
+
+        socket.on('update_chat', (data) => {
+            const isMe = data.user_id === user.id;
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML += `
+                <div class="flex ${isMe ? 'justify-end' : 'justify-start'}">
+                    <div class="p-3 rounded-2xl max-w-[85%] ${isMe ? 'bg-cyan-600 text-black' : 'bg-slate-800 text-white'}">
+                        <p class="text-[9px] font-bold opacity-50">${data.username}</p>
+                        <p>${data.message}</p>
+                    </div>
+                </div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+    </script>
+</body>
+</html>
