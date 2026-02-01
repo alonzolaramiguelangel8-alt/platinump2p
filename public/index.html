@@ -3,55 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PLATINUM P2P | Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Platinum P2P | Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root { --bg-dark: #0b0e11; --card-bg: #181a20; --gold: #fcd535; --green: #0ecb81; }
+        body { background-color: var(--bg-dark); color: #eaecef; font-family: 'Segoe UI', sans-serif; }
+        
+        /* Navbar */
+        .navbar { background-color: var(--card-bg); border-bottom: 1px solid #2b3139; }
+        .navbar-brand { color: var(--gold) !important; font-weight: bold; }
+        
+        /* Cards */
+        .stat-card { background-color: var(--card-bg); border-radius: 8px; padding: 20px; border: 1px solid #2b3139; }
+        .balance-text { font-size: 2rem; font-weight: bold; }
+        
+        /* Tablas */
+        .table-custom { color: #eaecef; }
+        .table-custom thead { color: #848e9c; }
+        .table-custom td { border-bottom: 1px solid #2b3139; vertical-align: middle; }
+        
+        .btn-buy { background-color: var(--green); color: white; border: none; }
+        .btn-sell { background-color: #f6465d; color: white; border: none; }
+    </style>
 </head>
-<body class="bg-slate-950 text-white font-sans">
-    <nav class="border-b border-slate-800 p-4 flex justify-between items-center">
-        <h1 class="text-2xl font-black text-cyan-400">PLATINUM</h1>
-        <div class="flex gap-4 items-center">
-            <span id="display-username" class="text-slate-400">Cargando...</span>
-            <div class="bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full text-sm font-bold border border-cyan-500/50">
-                Saldo: <span id="balance">1000.00</span> USDT
+<body>
+
+    <nav class="navbar navbar-expand-lg py-3">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="fas fa-coins"></i> PLATINUM P2P</a>
+            <div class="d-flex align-items-center">
+                <span class="me-3 text-muted" id="userEmailDisplay">Cargando...</span>
+                <button onclick="logout()" class="btn btn-outline-secondary btn-sm">Salir</button>
             </div>
-            <button onclick="localStorage.clear(); location.href='/login.html'" class="text-xs text-red-500">Salir</button>
         </div>
     </nav>
 
-    <main class="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="lg:col-span-2 space-y-6">
-            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6">
-                <h2 class="text-xl font-bold mb-4">Mercado P2P Venezuela</h2>
-                <div id="ads-list" class="space-y-3">
-                    <div class="p-4 bg-slate-800/50 rounded-2xl flex justify-between items-center border border-slate-700">
-                        <div>
-                            <p class="font-bold text-lg">45.50 <span class="text-xs text-slate-400">VES/USDT</span></p>
-                            <p class="text-sm text-slate-400 italic">Vendedor: PlatinumAdmin</p>
-                        </div>
-                        <button onclick="alert('Iniciando Orden...')" class="bg-cyan-500 text-slate-950 font-black px-6 py-2 rounded-xl">COMPRAR</button>
+    <div class="container mt-5">
+        
+        <div class="row mb-5">
+            <div class="col-md-12">
+                <div class="stat-card">
+                    <h5 class="text-muted mb-2">Balance Total Estimado</h5>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="balance-text" id="balanceDisplay">0.00</span>
+                        <span class="fs-4 text-gold">USDT</span>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-warning me-2">Recargar</button>
+                        <button class="btn btn-secondary">Retirar</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="space-y-6">
-            <div id="admin-link" class="hidden">
-                <a href="/admin.html" class="block w-full text-center bg-red-600/20 text-red-400 border border-red-600/50 py-3 rounded-2xl font-bold">PANEL ADMIN</a>
+        <h4 class="mb-3">Mercado P2P - Venezuela (VES)</h4>
+        
+        <div class="card bg-dark border-secondary">
+            <div class="card-header border-secondary">
+                <ul class="nav nav-tabs card-header-tabs">
+                    <li class="nav-item"><a class="nav-link active text-success" href="#">Comprar</a></li>
+                    <li class="nav-item"><a class="nav-link text-danger" href="#">Vender</a></li>
+                </ul>
             </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
-                <h2 class="text-lg font-bold mb-2">Estado de Cuenta</h2>
-                <p class="text-sm text-green-400">● Usuario Verificado (KYC 2)</p>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-custom mb-0">
+                        <thead>
+                            <tr>
+                                <th class="p-3">Comerciante</th>
+                                <th class="p-3">Precio</th>
+                                <th class="p-3">Límites/Disponible</th>
+                                <th class="p-3">Pago</th>
+                                <th class="p-3">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="p-3">
+                                    <div class="fw-bold text-warning">CambiosVzla_Rápido</div>
+                                    <small class="text-muted">98% completado</small>
+                                </td>
+                                <td class="p-3 fs-5 fw-bold">36.50 VES</td>
+                                <td class="p-3">
+                                    <div>Disp: 5,000.00 USDT</div>
+                                    <small class="text-muted">Lim: 500 - 10,000 VES</small>
+                                </td>
+                                <td class="p-3"><span class="badge bg-secondary">Pago Móvil</span></td>
+                                <td class="p-3"><button class="btn btn-buy btn-sm px-4">Comprar USDT</button></td>
+                            </tr>
+                            <tr>
+                                <td class="p-3">
+                                    <div class="fw-bold text-warning">Inversiones_Caracas</div>
+                                    <small class="text-muted">100% completado</small>
+                                </td>
+                                <td class="p-3 fs-5 fw-bold">36.55 VES</td>
+                                <td class="p-3">
+                                    <div>Disp: 1,200.00 USDT</div>
+                                    <small class="text-muted">Lim: 100 - 5,000 VES</small>
+                                </td>
+                                <td class="p-3"><span class="badge bg-primary">Banesco</span></td>
+                                <td class="p-3"><button class="btn btn-buy btn-sm px-4">Comprar USDT</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </main>
+
+    </div>
 
     <script>
-        const user = JSON.parse(localStorage.getItem('user'));
-        const token = localStorage.getItem('token');
-        if (!token) window.location.href = '/login.html';
+        // --- VALIDAR SESIÓN AL CARGAR ---
+        const userStr = localStorage.getItem('platinum_user');
+        if (!userStr) {
+            window.location.href = '/login.html'; // Si no hay usuario, devolver al login
+        }
 
-        document.getElementById('display-username').innerText = user.username;
-        if(user.isAdmin) document.getElementById('admin-link').classList.remove('hidden');
+        const user = JSON.parse(userStr);
+
+        // --- MOSTRAR DATOS ---
+        document.getElementById('userEmailDisplay').innerText = user.email;
+        document.getElementById('balanceDisplay').innerText = parseFloat(user.balance_usdt).toFixed(2);
+
+        // --- ACTUALIZAR SALDO DESDE SERVIDOR (OPCIONAL) ---
+        async function refreshBalance() {
+            try {
+                const res = await fetch(`/api/user/${user.email}`);
+                const data = await res.json();
+                if(data.balance_usdt) {
+                    document.getElementById('balanceDisplay').innerText = parseFloat(data.balance_usdt).toFixed(2);
+                    // Actualizar localStorage
+                    user.balance_usdt = data.balance_usdt;
+                    localStorage.setItem('platinum_user', JSON.stringify(user));
+                }
+            } catch(e) { console.error("Error actualizando saldo"); }
+        }
+        refreshBalance();
+
+        // --- LOGOUT ---
+        function logout() {
+            localStorage.removeItem('platinum_user');
+            window.location.href = '/login.html';
+        }
     </script>
 </body>
 </html>
