@@ -2,184 +2,173 @@ const express = require('express');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// --- 1. CONEXIÓN A BASE DE DATOS ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// --- BASE DE DATOS AVANZADA ---
+// Inicialización de Tablas (Nombres corregidos a order_id)
 async function initDB() {
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE,
-            email TEXT UNIQUE,
-            password_hash TEXT,
-            kyc_level INTEGER DEFAULT 0, -- 0: No verificado, 1: Cédula, 2: Completo
-            reputation_pos INTEGER DEFAULT 0,
-            reputation_neg INTEGER DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS wallets (
-            user_id INTEGER REFERENCES users(id),
-            balance_usdt DECIMAL(18,2) DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS ads (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id),
-            type TEXT, -- COMPRA / VENTA
-            bank TEXT, -- Banesco, Mercantil, Pago Movil, BCV
-            price DECIMAL(18,2),
-            min_limit DECIMAL(18,2),
-            max_limit DECIMAL(18,2)
-        );
-        CREATE TABLE IF NOT EXISTS orders (
-            order_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-            buyer_id INTEGER REFERENCES users(id),
-            seller_id INTEGER REFERENCES users(id),
-            ad_id INTEGER REFERENCES ads(id),
-            amount_usdt DECIMAL(18,2),
-            status TEXT DEFAULT 'ESPERANDO_PAGO' -- PAGADO, DISPUTA, LIBERADO, CANCELADO
-        );
-        CREATE TABLE IF NOT EXISTS messages (
-            id SERIAL PRIMARY KEY,
-            order_id UUID REFERENCES orders(order_id),
-            sender_id INTEGER REFERENCES users(id),
-            text TEXT,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    `);
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE,
+                email TEXT UNIQUE,
+                password_hash TEXT,
+                kyc_status TEXT DEFAULT 'APROBADO'
+            );
+            CREATE TABLE IF NOT EXISTS orders (
+                order_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                buyer_id INTEGER REFERENCES users(id),
+                seller_id INTEGER REFERENCES users(id),
+                amount_usdt DECIMAL(18,2),
+                price_ves DECIMAL(18,2),
+                bank TEXT,
+                status TEXT DEFAULT 'ESPERANDO_PAGO'
+            );
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                order_id UUID REFERENCES orders(order_id),
+                sender_id INTEGER REFERENCES users(id),
+                text TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("✅ Base de Datos Sincronizada");
+    } catch (err) { console.error("Error DB:", err); }
 }
 initDB();
 
-// --- FRONTEND PROFESIONAL (DASHBOARD P2P) ---
-const dashboardHTML = `
+// --- 2. INTERFAZ VISUAL (ENVIADA DIRECTAMENTE) ---
+
+const mainHTML = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Platinum P2P - Exchange</title>
+    <title>Platinum P2P - Venezuela</title>
     <style>
-        :root { --gold: #f3ba2f; --bg: #0b0e11; --card: #1e2329; --green: #2ebd85; --red: #f6465d; }
-        body { background: var(--bg); color: white; font-family: 'Inter', sans-serif; margin: 0; }
-        .nav { background: var(--card); padding: 15px 5%; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
-        .container { padding: 20px 5%; }
-        .tabs { display: flex; gap: 20px; margin-bottom: 20px; border-bottom: 1px solid #333; }
-        .tab { padding: 10px 20px; cursor: pointer; font-weight: bold; }
-        .tab.active { color: var(--gold); border-bottom: 2px solid var(--gold); }
-        
-        .filters { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 10px; }
-        .filter-btn { background: #2b3139; border: none; color: white; padding: 8px 15px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
-        
-        .ad-card { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 15px; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; align-items: center; transition: 0.3s; }
-        .ad-card:hover { background: #2b3139; }
-        .price { font-size: 22px; font-weight: bold; color: var(--gold); }
-        .btn-buy { background: var(--green); border: none; padding: 10px; border-radius: 4px; color: white; font-weight: bold; cursor: pointer; }
-        
-        /* CHAT MODAL */
-        .modal { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display:none; justify-content:center; align-items:center; }
-        .chat-window { background: var(--card); width: 90%; max-width: 500px; height: 80vh; border-radius: 15px; display: flex; flex-direction: column; }
-        .chat-header { padding: 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
-        .messages { flex: 1; overflow-y: auto; padding: 15px; }
-        .chat-input { padding: 15px; display: flex; gap: 10px; border-top: 1px solid #333; }
-        .msg-bubble { background: #2b3139; padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; max-width: 80%; }
-        .msg-me { background: #037dff; align-self: flex-end; margin-left: auto; }
+        :root { --gold: #f3ba2f; --bg: #0b0e11; --card: #1e2329; --green: #2ebd85; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; padding: 0; }
+        .auth-box { width: 320px; margin: 100px auto; background: var(--card); padding: 30px; border-radius: 10px; text-align: center; }
+        .p2p-container { display: none; padding: 20px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #444; background: #2b3139; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: var(--gold); border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .ad-card { background: var(--card); padding: 20px; border-radius: 10px; margin-top: 15px; border-left: 5px solid var(--gold); display: flex; justify-content: space-between; align-items: center; }
+        .chat-area { display: none; background: var(--card); padding: 20px; border-radius: 10px; margin-top: 20px; }
+        #msgs { height: 200px; overflow-y: auto; background: #000; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div class="nav">
-        <h2 style="color:var(--gold); margin:0;">PLATINUM P2P</h2>
-        <div id="user-info">Cargando...</div>
+    <div id="authArea" class="auth-box">
+        <h2 style="color:var(--gold)">PLATINUM P2P</h2>
+        <input type="text" id="user" placeholder="Usuario">
+        <input type="email" id="email" placeholder="Correo">
+        <input type="password" id="pass" placeholder="Contraseña">
+        <button onclick="auth('register')">REGISTRARSE</button>
+        <button onclick="auth('login')" style="background:none; color:var(--gold); border:1px solid var(--gold); margin-top:10px;">INGRESAR</button>
     </div>
 
-    <div class="container">
-        <div class="tabs">
-            <div class="tab active" onclick="setTab('COMPRA')">Compra</div>
-            <div class="tab" onclick="setTab('VENTA')">Venta</div>
+    <div id="p2pArea" class="p2p-container">
+        <header style="display:flex; justify-content:space-between">
+            <h2 style="color:var(--gold)">Mercado P2P (VES)</h2>
+            <span id="userName"></span>
+        </header>
+        
+        <div class="ad-card">
+            <div>
+                <b>Vendedor: Admin_Escrow</b><br>
+                Tasa: <span style="font-size:20px; color:var(--gold)">54.80 VES</span><br>
+                Bancos: Banesco, Pago Móvil
+            </div>
+            <button onclick="crearOrden()" style="width:150px; background:var(--green)">COMPRAR</button>
         </div>
 
-        <div class="filters">
-            <button class="filter-btn" onclick="filterBank('TODOS')">Todos los pagos</button>
-            <button class="filter-btn" onclick="filterBank('Banesco')">Banesco</button>
-            <button class="filter-btn" onclick="filterBank('Pago Movil')">Pago Móvil</button>
-            <button class="filter-btn" onclick="filterBank('Mercantil')">Mercantil</button>
-        </div>
-
-        <div id="market-list">
-            <div class="ad-card">
-                <div>
-                    <b>Admin_Escrow</b> <small>1500 órdenes | 100%</small><br>
-                    <small>Límites: 500 - 5,000 VES</small>
-                </div>
-                <div class="price">54.30 VES</div>
-                <div style="color:var(--gold)">Banesco</div>
-                <button class="btn-buy" onclick="openTrade('UUID-EJEMPLO')">Comprar USDT</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="tradeModal" class="modal">
-        <div class="chat-window">
-            <div class="chat-header">
-                <span>Orden: #<b id="order-id-display"></b></span>
-                <button onclick="closeModal()" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">&times;</button>
-            </div>
-            <div class="messages" id="chat-msgs"></div>
-            <div class="chat-input">
-                <input type="text" id="msg-input" placeholder="Escribe un mensaje..." style="flex:1; background:#000; color:white; border:none; padding:10px; border-radius:5px;">
-                <button onclick="sendMessage()" class="btn-buy" style="width:auto; padding:0 15px;">Enviar</button>
-            </div>
-            <div style="padding:10px; display:flex; gap:5px;">
-                <button onclick="updateStatus('PAGADO')" style="background:var(--gold); flex:1; border:none; padding:10px; border-radius:5px; font-weight:bold;">MARCAR PAGADO</button>
-                <button onclick="updateStatus('DISPUTA')" style="background:var(--red); flex:1; border:none; padding:10px; border-radius:5px; font-weight:bold;">APELAR</button>
+        <div id="chatArea" class="chat-area">
+            <h3>Orden: <small id="ordId"></small></h3>
+            <div id="msgs"></div>
+            <div style="display:flex; gap:10px">
+                <input type="text" id="txt" placeholder="Escribe al vendedor...">
+                <button onclick="enviarMsg()" style="width:100px">Enviar</button>
             </div>
         </div>
     </div>
 
     <script>
-        const user = JSON.parse(localStorage.getItem('user'));
-        if(!user) window.location.href = '/';
-        document.getElementById('user-info').innerText = user.username + " | KYC Lvl 2";
+        let currentUser = null;
+        let activeOrder = null;
 
-        async function openTrade(adId) {
-            document.getElementById('tradeModal').style.display = 'flex';
-            document.getElementById('order-id-display').innerText = "PRO-9921";
-            // Aquí llamarías a la API para crear la orden real
+        async function auth(type) {
+            const body = { username: user.value, email: email.value, password: pass.value };
+            const res = await fetch('/api/auth/' + type, { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(body) 
+            });
+            const data = await res.json();
+            if(res.ok) {
+                if(type === 'login') {
+                    currentUser = data.user;
+                    authArea.style.display = 'none';
+                    p2pArea.style.display = 'block';
+                    userName.innerText = currentUser.username;
+                } else alert("Registrado. Ahora ingresa.");
+            } else alert(data.error);
         }
 
-        function closeModal() { document.getElementById('tradeModal').style.display = 'none'; }
-        
-        function setTab(type) {
-            alert("Cambiando a modo: " + type);
-            // Lógica para filtrar anuncios por tipo en la API
+        async function crearOrden() {
+            const res = await fetch('/api/p2p/order', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ buyer_id: currentUser.id, seller_id: 1, amount: 100, price: 54.80, bank: 'Banesco' })
+            });
+            const data = await res.json();
+            activeOrder = data.order_id;
+            chatArea.style.display = 'block';
+            ordId.innerText = activeOrder;
+            setInterval(cargarChat, 2000);
+        }
+
+        async function enviarMsg() {
+            await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ order_id: activeOrder, sender_id: currentUser.id, text: txt.value })
+            });
+            txt.value = '';
+        }
+
+        async function cargarChat() {
+            const res = await fetch('/api/chat/' + activeOrder);
+            const data = await res.json();
+            msgs.innerHTML = data.map(m => \`<div><b>\${m.sender_id == currentUser.id ? 'Tú' : 'Vendedor'}:</b> \${m.text}</div>\`).join('');
         }
     </script>
 </body>
 </html>
 `;
 
-fs.writeFileSync(path.join(__dirname, 'index.html'), dashboardHTML);
+// --- 3. RUTAS DEL SERVIDOR ---
 
-// --- RUTAS API (EXPRESS) ---
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
-app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// Enviar el HTML directamente (Sin usar archivos físicos)
+app.get('/', (req, res) => res.send(mainHTML));
+app.get('/dashboard', (req, res) => res.send(mainHTML));
 
 app.post('/api/auth/register', async (req, res) => {
     const { username, email, password } = req.body;
     try {
-        const hashed = await bcrypt.hash(password, 10);
-        const result = await pool.query("INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3) RETURNING id, username", [username.toLowerCase(), email.toLowerCase(), hashed]);
-        await pool.query("INSERT INTO wallets (user_id) VALUES ($1)", [result.rows[0].id]);
-        res.json({ success: true, user: result.rows[0] });
-    } catch (e) { res.status(400).json({ error: "Datos duplicados" }); }
+        const hash = await bcrypt.hash(password, 10);
+        const result = await pool.query("INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3) RETURNING id, username", [username.toLowerCase(), email.toLowerCase(), hash]);
+        res.json({ success: true });
+    } catch (e) { res.status(400).json({ error: "Usuario ya existe" }); }
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -189,8 +178,25 @@ app.post('/api/auth/login', async (req, res) => {
         const valid = await bcrypt.compare(password, result.rows[0].password_hash);
         if(valid) res.json({ success: true, user: result.rows[0] });
         else res.status(400).json({ error: "Clave errada" });
-    } catch (e) { res.status(400).json({ error: "Usuario inexistente" }); }
+    } catch (e) { res.status(400).json({ error: "No existe" }); }
+});
+
+app.post('/api/p2p/order', async (req, res) => {
+    const { buyer_id, seller_id, amount, price, bank } = req.body;
+    const r = await pool.query("INSERT INTO orders (buyer_id, seller_id, amount_usdt, price_ves, bank) VALUES ($1,$2,$3,$4,$5) RETURNING order_id", [buyer_id, seller_id, amount, price, bank]);
+    res.json({ order_id: r.rows[0].order_id });
+});
+
+app.get('/api/chat/:id', async (req, res) => {
+    const r = await pool.query("SELECT * FROM messages WHERE order_id = $1 ORDER BY timestamp ASC", [req.params.id]);
+    res.json(r.rows);
+});
+
+app.post('/api/chat', async (req, res) => {
+    const { order_id, sender_id, text } = req.body;
+    await pool.query("INSERT INTO messages (order_id, sender_id, text) VALUES ($1,$2,$3)", [order_id, sender_id, text]);
+    res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🚀 Platinum P2P Professional Ready"));
+app.listen(PORT, () => console.log(`🚀 Platinum P2P Professional Ready`));
