@@ -1,152 +1,155 @@
+const mainHTML = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Platinum P2P | Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    
+    <title>Platinum Elite P2P</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        :root { --bg-dark: #0b0e11; --card-bg: #181a20; --gold: #fcd535; --green: #0ecb81; }
-        body { background-color: var(--bg-dark); color: #eaecef; font-family: 'Segoe UI', sans-serif; }
-        
-        /* Navbar */
-        .navbar { background-color: var(--card-bg); border-bottom: 1px solid #2b3139; }
-        .navbar-brand { color: var(--gold) !important; font-weight: bold; }
-        
-        /* Cards */
-        .stat-card { background-color: var(--card-bg); border-radius: 8px; padding: 20px; border: 1px solid #2b3139; }
-        .balance-text { font-size: 2rem; font-weight: bold; }
-        
-        /* Tablas */
-        .table-custom { color: #eaecef; }
-        .table-custom thead { color: #848e9c; }
-        .table-custom td { border-bottom: 1px solid #2b3139; vertical-align: middle; }
-        
-        .btn-buy { background-color: var(--green); color: white; border: none; }
-        .btn-sell { background-color: #f6465d; color: white; border: none; }
+        :root { --gold: #d4af37; --dark: #0a0a0a; --card: #151515; --green: #2ebd85; }
+        body { background: var(--dark); color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; }
+        .nav { background: #000; padding: 15px; display: flex; justify-content: space-around; border-bottom: 2px solid var(--gold); position: sticky; top:0; z-index:100; }
+        .nav b { cursor: pointer; color: var(--gold); font-size: 14px; }
+        .container { max-width: 600px; margin: auto; padding: 15px; }
+        .card { background: var(--card); border: 1px solid #222; padding: 20px; border-radius: 15px; margin-bottom: 15px; }
+        input, select { background: #111; color: #fff; border: 1px solid #333; padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+        button { background: linear-gradient(45deg, #d4af37, #f2d06b); border: none; padding: 12px; cursor: pointer; font-weight: bold; border-radius: 8px; width: 100%; color: #000; }
+        #chat-box { height: 300px; overflow-y: auto; background: #050505; padding: 15px; border-radius: 10px; border: 1px solid #222; display: flex; flex-direction: column; gap: 10px; }
+        .msg-line { padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 0.9em; }
+        .msg-me { background: var(--gold); color: #000; align-self: flex-end; }
+        .msg-other { background: #333; align-self: flex-start; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
+    <div id="viewAuth" class="container" style="margin-top:80px">
+        <div class="card" style="text-align:center">
+            <h1 style="color:var(--gold); letter-spacing:3px">PLATINUM ELITE</h1>
+            <input type="email" id="email" placeholder="Correo">
+            <input type="password" id="pass" placeholder="Clave">
+            <button onclick="auth()">INGRESAR AL NETWORK</button>
+        </div>
+    </div>
 
-    <nav class="navbar navbar-expand-lg py-3">
+    <div id="viewMain" class="hidden">
+        <div class="nav">
+            <b onclick="verTab('mercado')">MERCADO</b>
+            <b onclick="verTab('perfil')">MI CUENTA</b>
+            <span style="color:var(--gold)">Saldo: <span id="valSaldo"></span> USDT</span>
+        </div>
+
         <div class="container">
-            <a class="navbar-brand" href="#"><i class="fas fa-coins"></i> PLATINUM P2P</a>
-            <div class="d-flex align-items-center">
-                <span class="me-3 text-muted" id="userEmailDisplay">Cargando...</span>
-                <button onclick="logout()" class="btn btn-outline-secondary btn-sm">Salir</button>
+            <div id="tab-mercado">
+                <div class="card">
+                    <h4>PUBLICAR VENTA</h4>
+                    <select id="vBank">
+                        <option value="Banesco">Banesco</option>
+                        <option value="Pago Móvil">Pago Móvil</option>
+                        <option value="Mercantil">Mercantil</option>
+                    </select>
+                    <input type="number" id="vMonto" placeholder="Monto USDT">
+                    <input type="number" id="vPrecio" placeholder="Precio Bs">
+                    <button onclick="crearAnuncio()">PUBLICAR</button>
+                </div>
+                <div id="listaOrdenes"></div>
             </div>
-        </div>
-    </nav>
 
-    <div class="container mt-5">
-        
-        <div class="row mb-5">
-            <div class="col-md-12">
-                <div class="stat-card">
-                    <h5 class="text-muted mb-2">Balance Total Estimado</h5>
-                    <div class="d-flex align-items-center gap-3">
-                        <span class="balance-text" id="balanceDisplay">0.00</span>
-                        <span class="fs-4 text-gold">USDT</span>
-                    </div>
-                    <div class="mt-3">
-                        <button class="btn btn-warning me-2">Recargar</button>
-                        <button class="btn btn-secondary">Retirar</button>
-                    </div>
+            <div id="tab-perfil" class="hidden">
+                <div class="card" style="text-align:center">
+                    <h2 id="profUser" style="color:var(--gold)"></h2>
+                    <p>Status: <b id="profKyc"></b></p>
+                    <button onclick="location.reload()" style="background:#222; color:var(--gold)">Cerrar Sesión</button>
                 </div>
             </div>
-        </div>
 
-        <h4 class="mb-3">Mercado P2P - Venezuela (VES)</h4>
-        
-        <div class="card bg-dark border-secondary">
-            <div class="card-header border-secondary">
-                <ul class="nav nav-tabs card-header-tabs">
-                    <li class="nav-item"><a class="nav-link active text-success" href="#">Comprar</a></li>
-                    <li class="nav-item"><a class="nav-link text-danger" href="#">Vender</a></li>
-                </ul>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-custom mb-0">
-                        <thead>
-                            <tr>
-                                <th class="p-3">Comerciante</th>
-                                <th class="p-3">Precio</th>
-                                <th class="p-3">Límites/Disponible</th>
-                                <th class="p-3">Pago</th>
-                                <th class="p-3">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td class="p-3">
-                                    <div class="fw-bold text-warning">CambiosVzla_Rápido</div>
-                                    <small class="text-muted">98% completado</small>
-                                </td>
-                                <td class="p-3 fs-5 fw-bold">36.50 VES</td>
-                                <td class="p-3">
-                                    <div>Disp: 5,000.00 USDT</div>
-                                    <small class="text-muted">Lim: 500 - 10,000 VES</small>
-                                </td>
-                                <td class="p-3"><span class="badge bg-secondary">Pago Móvil</span></td>
-                                <td class="p-3"><button class="btn btn-buy btn-sm px-4">Comprar USDT</button></td>
-                            </tr>
-                            <tr>
-                                <td class="p-3">
-                                    <div class="fw-bold text-warning">Inversiones_Caracas</div>
-                                    <small class="text-muted">100% completado</small>
-                                </td>
-                                <td class="p-3 fs-5 fw-bold">36.55 VES</td>
-                                <td class="p-3">
-                                    <div>Disp: 1,200.00 USDT</div>
-                                    <small class="text-muted">Lim: 100 - 5,000 VES</small>
-                                </td>
-                                <td class="p-3"><span class="badge bg-primary">Banesco</span></td>
-                                <td class="p-3"><button class="btn btn-buy btn-sm px-4">Comprar USDT</button></td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <div id="viewChat" class="card hidden">
+                <div style="display:flex; justify-content:space-between">
+                    <b>ORDEN ACTIVA</b>
+                    <b onclick="verTab('mercado')" style="color:red; cursor:pointer">X</b>
                 </div>
+                <div id="chat-box"></div>
+                <div style="display:flex; gap:5px; margin-top:10px">
+                    <input type="text" id="msgInput" style="margin:0" placeholder="Mensaje...">
+                    <button onclick="enviarMsg()" style="width:60px">></button>
+                </div>
+                <button style="background:var(--green); margin-top:10px; color:#fff">CONFIRMAR RECEPCIÓN</button>
             </div>
         </div>
-
     </div>
 
     <script>
-        // --- VALIDAR SESIÓN AL CARGAR ---
-        const userStr = localStorage.getItem('platinum_user');
-        if (!userStr) {
-            window.location.href = '/login.html'; // Si no hay usuario, devolver al login
+        const socket = io();
+        let me = null, activeOrd = null;
+
+        async function auth() {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email: email.value, password: pass.value })
+            });
+            const data = await res.json();
+            if(data.success) {
+                me = data.user;
+                viewAuth.classList.add('hidden');
+                viewMain.classList.remove('hidden');
+                valSaldo.innerText = me.balance_usdt;
+                profUser.innerText = me.username;
+                profKyc.innerText = me.kyc_status;
+                cargarMercado();
+            }
         }
 
-        const user = JSON.parse(userStr);
-
-        // --- MOSTRAR DATOS ---
-        document.getElementById('userEmailDisplay').innerText = user.email;
-        document.getElementById('balanceDisplay').innerText = parseFloat(user.balance_usdt).toFixed(2);
-
-        // --- ACTUALIZAR SALDO DESDE SERVIDOR (OPCIONAL) ---
-        async function refreshBalance() {
-            try {
-                const res = await fetch(`/api/user/${user.email}`);
-                const data = await res.json();
-                if(data.balance_usdt) {
-                    document.getElementById('balanceDisplay').innerText = parseFloat(data.balance_usdt).toFixed(2);
-                    // Actualizar localStorage
-                    user.balance_usdt = data.balance_usdt;
-                    localStorage.setItem('platinum_user', JSON.stringify(user));
-                }
-            } catch(e) { console.error("Error actualizando saldo"); }
+        async function cargarMercado() {
+            const res = await fetch('/api/ordenes');
+            const data = await res.json();
+            listaOrdenes.innerHTML = data.map(o => \`
+                <div class="card" style="display:flex; justify-content:space-between; align-items:center">
+                    <div><b>\${o.bank}</b><br><small>\${o.amount_usdt} USDT</small></div>
+                    <div style="color:var(--gold); font-weight:bold">\${o.price_ves} Bs</div>
+                    <button onclick="abrirChat('\${o.order_id}')" style="width:80px">COMPRAR</button>
+                </div>
+            \`).join('');
         }
-        refreshBalance();
 
-        // --- LOGOUT ---
-        function logout() {
-            localStorage.removeItem('platinum_user');
-            window.location.href = '/login.html';
+        function abrirChat(id) {
+            activeOrd = id;
+            viewChat.classList.remove('hidden');
+            tab-mercado.classList.add('hidden');
+            document.getElementById('chat-box').innerHTML = "";
+            socket.emit('unirse_p2p', id);
+        }
+
+        function enviarMsg() {
+            const text = msgInput.value;
+            if(!text) return;
+            socket.emit('msg_p2p', { order_id: activeOrd, sender_id: me.id, username: me.username, text });
+            msgInput.value = "";
+        }
+
+        socket.on('update_chat', (data) => {
+            const box = document.getElementById('chat-box');
+            const clase = data.username === me.username ? 'msg-me' : 'msg-other';
+            box.innerHTML += \`<div class="msg-line \${clase}"><b>\${data.username}:</b> \${data.text}</div>\`;
+            box.scrollTop = box.scrollHeight;
+        });
+
+        async function crearAnuncio() {
+            await fetch('/api/crear-orden', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ seller_id: me.id, amount: vMonto.value, price: vPrecio.value, bank: vBank.value })
+            });
+            vMonto.value = ""; vPrecio.value = "";
+            cargarMercado();
+        }
+
+        function verTab(t) {
+            document.getElementById('tab-mercado').classList.toggle('hidden', t !== 'mercado');
+            document.getElementById('tab-perfil').classList.toggle('hidden', t !== 'perfil');
+            viewChat.classList.add('hidden');
         }
     </script>
 </body>
 </html>
+`;
