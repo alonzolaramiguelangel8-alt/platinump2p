@@ -26,12 +26,21 @@ const pool = new Pool({
 const swarm = new Hyperswarm();
 const topic = crypto.createHash('sha256').update('platinum-p2p-elite-network').digest();
 
+// Reemplaza tu función startP2P por esta versión protegida:
 async function startP2P() {
     try {
         const discovery = swarm.join(topic, { client: true, server: true });
+        
+        // Añadimos un manejador de errores global para que el servidor no explote
+        swarm.on('error', (err) => {
+            console.log('⚠️ Aviso P2P (No crítico):', err.message);
+        });
+
         await discovery.flushed();
         console.log('🌐 Red P2P Sincronizada');
-    } catch (e) { console.error('Error P2P:', e); }
+    } catch (e) { 
+        console.error('❌ Error al iniciar P2P, pero el servidor sigue vivo:', e.message); 
+    }
 }
 
 swarm.on('connection', (conn, info) => {
