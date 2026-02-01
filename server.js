@@ -3,56 +3,25 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const { Pool } = require('pg');
-const Hyperswarm = require('hyperswarm');
-const crypto = require('crypto');
-const b4a = require('b4a');
+const Hyperswarm = require('hyperswarm'); // Re-agregado
+const crypto = require('crypto');         // Re-agregado
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// --- CONFIGURACIÓN ---
+// MIDDLEWARES
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// Esta línea sirve los archivos de la carpeta public automáticamente
 app.use(express.static(path.join(__dirname, 'public')));
 
+// CONEXIÓN A BASE DE DATOS
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// --- 1. MOTOR P2P (HYPERSWARM) ---
-const swarm = new Hyperswarm();
-const topic = crypto.createHash('sha256').update('platinum-p2p-elite-network').digest();
-
-// Reemplaza tu función startP2P por esta versión protegida:
-async function startP2P() {
-    try {
-        const discovery = swarm.join(topic, { client: true, server: true });
-        
-        // Añadimos un manejador de errores global para que el servidor no explote
-        swarm.on('error', (err) => {
-            console.log('⚠️ Aviso P2P (No crítico):', err.message);
-        });
-
-        await discovery.flushed();
-        console.log('🌐 Red P2P Sincronizada');
-    } catch (e) { 
-        console.error('❌ Error al iniciar P2P, pero el servidor sigue vivo:', e.message); 
-    }
-}
-
-swarm.on('connection', (conn, info) => {
-    conn.on('data', (data) => {
-        try {
-            const msg = JSON.parse(data.toString());
-            io.emit('p2p_broadcast', msg);
-        } catch (e) { }
-    });
-});
-
-// --- 2. BASE DE DATOS ---
+// --- 1. INICIALIZACIÓN DE TABLAS ---
 const initDB = async () => {
     try {
         await pool.query(`
@@ -75,13 +44,27 @@ const initDB = async () => {
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log("✅ DB Lista");
-    } catch (err) { console.error("Error DB:", err); }
+        console.log("✅ PLATINUM DB: Lista.");
+    } catch (err) { console.error("❌ Error DB:", err.message); }
 };
 
-// --- 3. RUTAS ---
+// --- 2. RUTAS DE ACCESO ---
+
+// CORREGIDO: Ahora cierra correctamente con });
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+}); 
+
+app.get('/admin-power-up', async (req, res) => {
+    try {
+        const miEmail = 'alonzolaramiguelangel@gmail.com';
+        const result = await pool.query("UPDATE users SET balance_usdt = 10000, is_admin = true WHERE email = $1 OR username = $1 RETURNING *", [miEmail]);
+        if (result.rowCount > 0) {
+            res.send("<div style='text-align:center;padding:50px;'><h1>✅ ACCESO NIVEL DIOS ACTIVADO</h1><a href='/'>VOLVER</a></div>");
+        } else {
+            res.send("<h1>⚠️ Regístrate primero en la app.</h1>");
+        }
+    } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/registro', async (req, res) => {
@@ -101,19 +84,7 @@ app.post('/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/admin-power-up', async (req, res) => {
-    const miEmail = 'alonzolaramiguelangel@gmail.com';
-    try {
-        const result = await pool.query("UPDATE users SET balance_usdt = 10000, is_admin = true WHERE email = $1 OR username = $1 RETURNING *", [miEmail]);
-        if (result.rowCount > 0) {
-            res.send("<h1>✅ NIVEL DIOS ACTIVADO</h1><a href='/'>VOLVER</a>");
-        } else {
-            res.send("<h1>⚠️ Regístrate primero con el correo: " + miEmail + "</h1>");
-        }
-    } catch (err) { res.status(500).send("Error de DB"); }
-});
-
-// --- 4. MERCADO & SOCKETS ---
+// --- 3. MERCADO & CHAT ---
 app.get('/api/mercado', async (req, res) => {
     try {
         const result = await pool.query("SELECT o.*, u.username FROM ordenes o JOIN users u ON o.vendedor_id = u.id WHERE o.estatus = 'ABIERTA'");
@@ -124,18 +95,12 @@ app.get('/api/mercado', async (req, res) => {
 io.on('connection', (socket) => {
     socket.on('unirse_p2p', (id) => socket.join("orden_" + id));
     socket.on('msg_p2p', (data) => {
-        io.to("orden_" + data.ordenId).emit('update_chat', {
-            user: data.user,
-            text: data.text,
-            time: new Date().toLocaleTimeString()
-        });
-        socket.broadcast.emit('notificacion_global', { from: data.user });
+        io.to("orden_" + data.ordenId).emit('update_chat', data);
     });
 });
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
     initDB();
-    startP2P();
-    console.log(`🚀 PLATINUM LIVE`);
+    console.log(`🚀 PLATINUM SERVER LIVE ON PORT ${PORT}`);
 });
