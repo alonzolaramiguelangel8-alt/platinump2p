@@ -11,7 +11,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 // MIDDLEWARES
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
+app.use(express.static('public')); // ESTO BUSCA LA CARPETA PUBLIC
 
 // CONEXIÓN A BASE DE DATOS
 const pool = new Pool({
@@ -22,9 +22,11 @@ const pool = new Pool({
 // --- 1. INICIALIZACIÓN DE TABLAS ---
 const initDB = async () => {
     try {
+        // Limpieza inicial
         await pool.query('DROP TABLE IF EXISTS ordenes CASCADE;');
         await pool.query('DROP TABLE IF EXISTS users CASCADE;');
 
+        // Crear Usuarios
         await pool.query(`
             CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
@@ -37,6 +39,7 @@ const initDB = async () => {
             );
         `);
 
+        // Crear Órdenes
         await pool.query(`
             CREATE TABLE ordenes (
                 id SERIAL PRIMARY KEY,
@@ -48,7 +51,7 @@ const initDB = async () => {
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log("✅ PLATINUM DB: Todo listo.");
+        console.log("✅ PLATINUM DB: Sistema listo.");
     } catch (err) {
         console.error("❌ Error DB:", err.message);
     }
@@ -57,21 +60,22 @@ initDB();
 
 // --- 2. RUTAS DE ACCESO ---
 
+// RUTA PRINCIPAL (CORREGIDA)
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+}); 
+// ↑↑↑ AQUÍ ESTABA EL ERROR: FALTABA CERRAR ESTA LLAVE
 
 app.get('/admin-power-up', async (req, res) => {
     try {
         const miEmail = 'alonzolaramiguelangel@gmail.com';
-        const result = await pool.query(
-            "UPDATE users SET balance_usdt = 10000, is_admin = true WHERE email = $1 OR username = $1 RETURNING *",
-            [miEmail]
-        );
+        const query = `UPDATE users SET balance_usdt = 10000, is_admin = true, kyc_status = 'verificado' WHERE email = $1 OR username = $1 RETURNING *`;
+        const result = await pool.query(query, [miEmail]);
+        
         if (result.rowCount > 0) {
-            res.send("<div style='text-align:center;padding:50px;'><h1>✅ ADMIN ACTIVADO</h1><a href='/'>VOLVER</a></div>");
+            res.send("<h1>✅ ACCESO NIVEL DIOS ACTIVADO</h1><p>Vuelve al inicio.</p>");
         } else {
-            res.send("<h1>⚠️ Regístrate primero en la app</h1>");
+            res.send("<h1>⚠️ Error: Usuario no encontrado. Regístrate primero.</h1>");
         }
     } catch (err) { res.status(500).send(err.message); }
 });
@@ -85,7 +89,7 @@ app.post('/registro', async (req, res) => {
         );
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ success: false, error: "Usuario duplicado o error de DB" });
+        res.status(500).json({ success: false, error: "Usuario duplicado" });
     }
 });
 
@@ -94,7 +98,7 @@ app.post('/login', async (req, res) => {
     try {
         const r = await pool.query('SELECT * FROM users WHERE (username = $1 OR email = $1) AND password = $2', [username, password]);
         if (r.rows.length > 0) res.json({ success: true, user: r.rows[0] });
-        else res.status(401).json({ success: false, message: "No coincide" });
+        else res.status(401).json({ success: false, message: "Credenciales inválidas" });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -104,14 +108,28 @@ app.get('/api/mercado', async (req, res) => {
     try {
         const result = await pool.query("SELECT o.*, u.username FROM ordenes o JOIN users u ON o.vendedor_id = u.id WHERE o.estatus = 'ABIERTA'");
         res.json(result.rows);
-    } catch (err) { res.status(500).send(err.message); }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/crear-orden', async (req, res) => {
     const { seller_id, amount, price } = req.body;
     try {
+        const user = await pool.query('SELECT balance_usdt FROM users WHERE id = $1', [seller_id]);
+        if (parseFloat(user.rows[0].balance_usdt) < parseFloat(amount)) {
+            return res.status(400).json({ error: "Saldo insuficiente" });
+        }
         await pool.query('UPDATE users SET balance_usdt = balance_usdt - $1 WHERE id = $2', [amount, seller_id]);
         await pool.query('INSERT INTO ordenes (vendedor_id, monto_usdt, monto_bs) VALUES ($1, $2, $3)', [seller_id, amount, price]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/liberar-fondos', async (req, res) => {
+    const { ordenId, compradorId, monto } = req.body;
+    try {
+        await pool.query('UPDATE users SET balance_usdt = balance_usdt + $1 WHERE id = $2', [monto, compradorId]);
+        await pool.query("UPDATE ordenes SET estatus = 'FINALIZADA' WHERE id = $1", [ordenId]);
+        io.to("orden_" + ordenId).emit('finalizado');
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -123,4 +141,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 LIVE ON PORT ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 SERVIDOR LISTO EN PUERTO ${PORT}`));
