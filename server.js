@@ -101,6 +101,3 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`🚀 Platinum Elite P2P en puerto ${PORT}`));
-
-// --- INTERFAZ INTEGRADA (HTML) ---
-const mainHTML = `... (Sigue abajo) ...`;
