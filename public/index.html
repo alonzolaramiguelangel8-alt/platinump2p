@@ -60,11 +60,12 @@ initDB();
 
 // --- 2. RUTAS DE ACCESO Y ADMIN ---
 
+// TU CÓDIGO ACTUAL (ERROR):
 app.get('/', (req, res) => {
    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// <--- AQUÍ FALTA EL CIERRE });
+app.get('/admin-power-up', async (req, res) => { ...
 
-app.get('/admin-power-up', async (req, res) => {
-    try {
         const miEmail = 'alonzolaramiguelangel@gmail.com';
         const query = `
             UPDATE users 
