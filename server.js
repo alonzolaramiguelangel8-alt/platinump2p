@@ -57,6 +57,28 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// ==========================================
+// 🔥 BLOQUE DE LIMPIEZA DE EMERGENCIA
+// ==========================================
+const resetTotal = async () => {
+    try {
+        await pool.query('DROP TABLE IF EXISTS wallets CASCADE;');
+        await pool.query('DROP TABLE IF EXISTS orders CASCADE;');
+        await pool.query('DROP TABLE IF EXISTS users CASCADE;');
+        console.log("🔥 BASE DE DATOS RESETEADA: TODO BORRADO");
+        
+        // Llamamos a la función que crea las tablas desde cero
+        if (typeof inicializarTablas === 'function') {
+            await inicializarTablas();
+            console.log("✅ TABLAS NUEVAS CREADAS");
+        }
+    } catch (err) {
+        console.error("❌ Error en el reset:", err);
+    }
+};
+resetTotal(); 
+// ==========================================
+
 // --- 3. RUTAS DE AUTENTICACIÓN (MEJORADAS) ---
 
 app.post('/api/auth/register', async (req, res) => {
