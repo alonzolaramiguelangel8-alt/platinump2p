@@ -560,3 +560,7 @@ server.listen(PORT, () => {
     console.log(`🚀 PLATINUM P2P ENGINE (VENEZUELA) CORRIENDO EN PUERTO ${PORT}`);
     console.log(`🔒 Seguridad Activada: JWT + Helmet + RateLimit`);
     console.log(`📡 Sockets Listos`);
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 PLATINUM ENGINE TOTAL LIVE ON PORT: ${PORT}`);
+});
