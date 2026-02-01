@@ -2,54 +2,53 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Platinum P2P - Login</title>
+    <title>Platinum P2P - Acceso</title>
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; padding: 50px; background: #1a1a1a; color: white; }
-        .card { background: #2a2a2a; padding: 20px; border-radius: 10px; width: 300px; }
-        input { width: 90%; margin: 10px 0; padding: 10px; border-radius: 5px; border: none; }
-        button { width: 100%; padding: 10px; background: #f3ba2f; border: none; cursor: pointer; font-weight: bold; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0b0e11; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: #1e2329; padding: 40px; border-radius: 10px; width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; }
+        h2 { color: #f3ba2f; margin-bottom: 25px; }
+        input { width: 100%; padding: 12px; margin: 10px -12px; border-radius: 5px; border: 1px solid #474d57; background: #2b2f36; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .btn-gold { background: #f3ba2f; color: black; }
+        .btn-outline { background: transparent; border: 1px solid #f3ba2f; color: #f3ba2f; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>Registro / Login</h2>
-        <input type="text" id="user" placeholder="Usuario (solo para registro)">
-        <input type="email" id="email" placeholder="Correo">
+    <div class="login-box">
+        <h2>Platinum P2P</h2>
+        <input type="text" id="user" placeholder="Nombre de Usuario">
+        <input type="email" id="email" placeholder="Correo Electrónico">
         <input type="password" id="pass" placeholder="Contraseña">
-        <button onclick="auth('register')">CREAR CUENTA</button>
-        <hr>
-        <button onclick="auth('login')" style="background: #555; color: white;">INGRESAR</button>
+        
+        <button class="btn-gold" onclick="auth('register')">REGISTRARME</button>
+        <button class="btn-outline" onclick="auth('login')">INICIAR SESIÓN</button>
     </div>
 
     <script>
         async function auth(type) {
-            const data = {
+            const payload = {
                 username: document.getElementById('user').value,
                 email: document.getElementById('email').value,
                 password: document.getElementById('pass').value
             };
 
-            const route = type === 'register' ? '/api/auth/register' : '/api/auth/login';
-            
-            try {
-                const res = await fetch(route, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-                const result = await res.json();
-                
-                if (result.success) {
-                    if (type === 'register') {
-                        alert("¡Cuenta creada! Ahora haz clic en INGRESAR");
-                    } else {
-                        localStorage.setItem('user', JSON.stringify(result.user));
-                        window.location.href = "index.html";
-                    }
+            const response = await fetch(`/api/auth/${type}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+
+            const res = await response.json();
+            if (response.ok) {
+                if (type === 'register') {
+                    alert("✅ Registrado con éxito. Ahora dale a Iniciar Sesión.");
                 } else {
-                    alert("Error: " + result.error);
+                    localStorage.setItem('user', JSON.stringify(res.user));
+                    window.location.href = "index.html";
                 }
-            } catch (err) { alert("Error de conexión"); }
+            } else {
+                alert("❌ Error: " + res.error);
+            }
         }
     </script>
 </body>
