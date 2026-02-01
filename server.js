@@ -67,10 +67,15 @@ const initDB = async () => {
     } catch (err) { console.error(err); }
 };
 
-// --- 3. RUTAS DE ACCESO ---
+// Busca esta parte en tu server.js y reemplázala:
+
 app.get('/', (req, res) => {
+    // Esto asegura que busque el archivo DENTRO de la carpeta public
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// Y asegúrate de tener esta línea JUSTO ARRIBA de las rutas:
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.post('/registro', async (req, res) => {
     const { username, email, password } = req.body;
