@@ -1,1 +1,51 @@
-
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>PLATINUM | Entrar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 flex items-center justify-center min-h-screen">
+    <div class="bg-slate-900 p-8 rounded-3xl border border-slate-800 w-full max-w-md">
+        <h2 class="text-3xl font-black text-cyan-400 mb-6 text-center">PLATINUM</h2>
+        <div id="auth-form" class="space-y-4">
+            <input id="email" type="email" placeholder="Correo electrónico" class="w-full bg-slate-800 border-none rounded-xl p-4 text-white">
+            <input id="password" type="password" placeholder="Contraseña" class="w-full bg-slate-800 border-none rounded-xl p-4 text-white">
+            <input id="username" type="text" placeholder="Nombre de Usuario" class="hidden w-full bg-slate-800 border-none rounded-xl p-4 text-white">
+            <button onclick="handleAuth()" id="btn-main" class="w-full bg-cyan-500 text-slate-900 font-bold py-4 rounded-xl">INGRESAR</button>
+            <p class="text-center text-slate-500 text-sm">
+                <button onclick="toggleMode()" id="btn-toggle">¿No tienes cuenta? Regístrate aquí</button>
+            </p>
+        </div>
+    </div>
+    <script>
+        let isLogin = true;
+        function toggleMode() {
+            isLogin = !isLogin;
+            document.getElementById('username').classList.toggle('hidden');
+            document.getElementById('btn-main').innerText = isLogin ? 'INGRESAR' : 'CREAR CUENTA';
+            document.getElementById('btn-toggle').innerText = isLogin ? '¿Regístrate aquí?' : '¿Ya tienes cuenta? Ingresa';
+        }
+        async function handleAuth() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const username = document.getElementById('username').value;
+            const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+            const body = isLogin ? { email, password } : { email, password, username };
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                if (isLogin) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify({ username: data.username, isAdmin: data.isAdmin }));
+                    window.location.href = '/index.html';
+                } else { alert("¡Registro exitoso! Ahora ingresa."); toggleMode(); }
+            } else { alert("Error: " + data.error); }
+        }
+    </script>
+</body>
+</html>
