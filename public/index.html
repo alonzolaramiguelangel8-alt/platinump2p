@@ -1,4 +1,3 @@
-const mainHTML = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -7,149 +6,1450 @@ const mainHTML = `
     <title>Platinum Elite P2P</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        :root { --gold: #d4af37; --dark: #0a0a0a; --card: #151515; --green: #2ebd85; }
-        body { background: var(--dark); color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; }
-        .nav { background: #000; padding: 15px; display: flex; justify-content: space-around; border-bottom: 2px solid var(--gold); position: sticky; top:0; z-index:100; }
-        .nav b { cursor: pointer; color: var(--gold); font-size: 14px; }
-        .container { max-width: 600px; margin: auto; padding: 15px; }
-        .card { background: var(--card); border: 1px solid #222; padding: 20px; border-radius: 15px; margin-bottom: 15px; }
-        input, select { background: #111; color: #fff; border: 1px solid #333; padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
-        button { background: linear-gradient(45deg, #d4af37, #f2d06b); border: none; padding: 12px; cursor: pointer; font-weight: bold; border-radius: 8px; width: 100%; color: #000; }
-        #chat-box { height: 300px; overflow-y: auto; background: #050505; padding: 15px; border-radius: 10px; border: 1px solid #222; display: flex; flex-direction: column; gap: 10px; }
-        .msg-line { padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 0.9em; }
-        .msg-me { background: var(--gold); color: #000; align-self: flex-end; }
-        .msg-other { background: #333; align-self: flex-start; }
-        .hidden { display: none; }
-    </style>
-</head>
-<body>
-    <div id="viewAuth" class="container" style="margin-top:80px">
-        <div class="card" style="text-align:center">
-            <h1 style="color:var(--gold); letter-spacing:3px">PLATINUM ELITE</h1>
-            <input type="email" id="email" placeholder="Correo">
-            <input type="password" id="pass" placeholder="Clave">
-            <button onclick="auth()">INGRESAR AL NETWORK</button>
-        </div>
-    </div>
+        :root {
+            --gold: #d4af37;
+            --gold-light: #f2d06b;
+            --dark: #0a0a0a;
+            --card: #151515;
+            --green: #2ebd85;
+            --red: #f6465d;
+            --blue: #3b82f6;
+            --purple: #a855f7;
+        }
 
-    <div id="viewMain" class="hidden">
-        <div class="nav">
-            <b onclick="verTab('mercado')">MERCADO</b>
-            <b onclick="verTab('perfil')">MI CUENTA</b>
-            <span style="color:var(--gold)">Saldo: <span id="valSaldo"></span> USDT</span>
-        </div>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-        <div class="container">
-            <div id="tab-mercado">
-                <div class="card">
-                    <h4>PUBLICAR VENTA</h4>
-                    <select id="vBank">
-                        <option value="Banesco">Banesco</option>
-                        <option value="Pago Móvil">Pago Móvil</option>
-                        <option value="Mercantil">Mercantil</option>
-                    </select>
-                    <input type="number" id="vMonto" placeholder="Monto USDT">
-                    <input type="number" id="vPrecio" placeholder="Precio Bs">
-                    <button onclick="crearAnuncio()">PUBLICAR</button>
-                </div>
-                <div id="listaOrdenes"></div>
-            </div>
+        body {
+            background: var(--dark);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
 
-            <div id="tab-perfil" class="hidden">
-                <div class="card" style="text-align:center">
-                    <h2 id="profUser" style="color:var(--gold)"></h2>
-                    <p>Status: <b id="profKyc"></b></p>
-                    <button onclick="location.reload()" style="background:#222; color:var(--gold)">Cerrar Sesión</button>
-                </div>
-            </div>
+        /* ==================== NAVEGACIÓN ==================== */
+        .nav {
+            background: linear-gradient(135deg, #000 0%, #1a1a1a 100%);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--gold);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3);
+        }
 
-            <div id="viewChat" class="card hidden">
-                <div style="display:flex; justify-content:space-between">
-                    <b>ORDEN ACTIVA</b>
-                    <b onclick="verTab('mercado')" style="color:red; cursor:pointer">X</b>
-                </div>
-                <div id="chat-box"></div>
-                <div style="display:flex; gap:5px; margin-top:10px">
-                    <input type="text" id="msgInput" style="margin:0" placeholder="Mensaje...">
-                    <button onclick="enviarMsg()" style="width:60px">></button>
-                </div>
-                <button style="background:var(--green); margin-top:10px; color:#fff">CONFIRMAR RECEPCIÓN</button>
-            </div>
-        </div>
-    </div>
+        .nav-left {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
 
-    <script>
-        const socket = io();
-        let me = null, activeOrd = null;
+        .nav-logo {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--gold);
+            letter-spacing: 3px;
+        }
 
-        async function auth() {
-            const res = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email: email.value, password: pass.value })
-            });
-            const data = await res.json();
-            if(data.success) {
-                me = data.user;
-                viewAuth.classList.add('hidden');
-                viewMain.classList.remove('hidden');
-                valSaldo.innerText = me.balance_usdt;
-                profUser.innerText = me.username;
-                profKyc.innerText = me.kyc_status;
-                cargarMercado();
+        .nav-item {
+            cursor: pointer;
+            color: var(--gold);
+            font-size: 13px;
+            text-transform: uppercase;
+            font-weight: 600;
+            transition: all 0.3s;
+            padding: 8px 15px;
+            border-radius: 5px;
+        }
+
+        .nav-item:hover {
+            background: rgba(212, 175, 55, 0.2);
+        }
+
+        .nav-item.active {
+            background: var(--gold);
+            color: #000;
+        }
+
+        .nav-balance {
+            text-align: right;
+        }
+
+        .nav-balance small {
+            color: gray;
+            font-size: 10px;
+            display: block;
+        }
+
+        .nav-balance .balance-amount {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--gold);
+        }
+
+        /* ==================== CONTENEDOR ==================== */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .container-sm {
+            max-width: 600px;
+        }
+
+        /* ==================== CARDS ==================== */
+        .card {
+            background: linear-gradient(135deg, var(--card) 0%, #1a1a1a 100%);
+            border: 1px solid #333;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(212, 175, 55, 0.2);
+        }
+
+        .card-title {
+            color: var(--gold);
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* ==================== INPUTS ==================== */
+        input, select, textarea {
+            background: #0d0d0d;
+            color: #fff;
+            border: 1px solid #333;
+            padding: 14px;
+            border-radius: 8px;
+            width: 100%;
+            font-size: 15px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+        }
+
+        /* ==================== BOTONES ==================== */
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+            color: #000;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.4);
+        }
+
+        .btn-success {
+            background: var(--green);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--red);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #333;
+            color: var(--gold);
+            border: 1px solid var(--gold);
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 12px;
+            width: auto;
+        }
+
+        /* ==================== CHAT ==================== */
+        .chat-box {
+            height: 400px;
+            overflow-y: auto;
+            background: #050505;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #222;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .chat-box::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-box::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+
+        .chat-box::-webkit-scrollbar-thumb {
+            background: var(--gold);
+            border-radius: 4px;
+        }
+
+        .msg-line {
+            padding: 12px 16px;
+            border-radius: 16px;
+            max-width: 75%;
+            font-size: 14px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
         }
 
-        async function cargarMercado() {
-            const res = await fetch('/api/ordenes');
-            const data = await res.json();
-            listaOrdenes.innerHTML = data.map(o => \`
-                <div class="card" style="display:flex; justify-content:space-between; align-items:center">
-                    <div><b>\${o.bank}</b><br><small>\${o.amount_usdt} USDT</small></div>
-                    <div style="color:var(--gold); font-weight:bold">\${o.price_ves} Bs</div>
-                    <button onclick="abrirChat('\${o.order_id}')" style="width:80px">COMPRAR</button>
+        .msg-me {
+            background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+            color: #000;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-other {
+            background: #2a2a2a;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg-system {
+            background: rgba(59, 130, 246, 0.2);
+            align-self: center;
+            text-align: center;
+            border: 1px solid var(--blue);
+            font-size: 12px;
+            font-style: italic;
+        }
+
+        .msg-admin {
+            background: rgba(168, 85, 247, 0.2);
+            border: 1px solid var(--purple);
+        }
+
+        /* ==================== ÓRDENES ==================== */
+        .order-item {
+            background: linear-gradient(135deg, #1a1a1a 0%, #222 100%);
+            border-left: 4px solid var(--gold);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 20px;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .order-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.2);
+        }
+
+        .order-info h4 {
+            color: var(--gold);
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .order-info p {
+            color: #999;
+            font-size: 13px;
+            margin: 4px 0;
+        }
+
+        .order-price {
+            text-align: right;
+        }
+
+        .order-price .price {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--gold);
+            display: block;
+        }
+
+        .order-price .currency {
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* ==================== REPUTACIÓN ==================== */
+        .reputation {
+            display: inline-flex;
+            gap: 3px;
+            font-size: 16px;
+        }
+
+        .star {
+            color: #444;
+        }
+
+        .star.filled {
+            color: var(--gold);
+        }
+
+        /* ==================== PERFIL ==================== */
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-size: 32px;
+            font-weight: bold;
+            margin: 0 auto 20px;
+            box-shadow: 0 8px 24px rgba(212, 175, 55, 0.4);
+        }
+
+        .profile-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .profile-stat:last-child {
+            border-bottom: none;
+        }
+
+        .profile-stat label {
+            color: #999;
+            font-size: 13px;
+        }
+
+        .profile-stat value {
+            color: var(--gold);
+            font-weight: bold;
+        }
+
+        /* ==================== ADMIN PANEL ==================== */
+        .admin-header {
+            background: linear-gradient(135deg, var(--purple) 0%, #7c3aed 100%);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .admin-header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .admin-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .admin-stat-card {
+            background: linear-gradient(135deg, #1a1a1a 0%, #252525 100%);
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            text-align: center;
+        }
+
+        .admin-stat-card .number {
+            font-size: 36px;
+            font-weight: bold;
+            color: var(--gold);
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .admin-stat-card .label {
+            color: #999;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .admin-table th {
+            background: #1a1a1a;
+            color: var(--gold);
+            padding: 15px;
+            text-align: left;
+            font-size: 12px;
+            text-transform: uppercase;
+            border-bottom: 2px solid var(--gold);
+        }
+
+        .admin-table td {
+            padding: 15px;
+            border-bottom: 1px solid #333;
+        }
+
+        .admin-table tr:hover {
+            background: #1a1a1a;
+        }
+
+        /* ==================== FILTROS ==================== */
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        /* ==================== SOPORTE FLOTANTE ==================== */
+        .support-float {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 999;
+        }
+
+        .support-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--blue) 0%, #2563eb 100%);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+            transition: all 0.3s;
+        }
+
+        .support-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .support-panel {
+            position: fixed;
+            bottom: 100px;
+            right: 30px;
+            width: 350px;
+            max-height: 500px;
+            background: var(--card);
+            border: 1px solid #333;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            z-index: 998;
+        }
+
+        .support-panel.active {
+            display: flex;
+        }
+
+        .support-header {
+            background: var(--blue);
+            padding: 15px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .support-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* ==================== UTILIDADES ==================== */
+        .hidden {
+            display: none !important;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .gap-10 {
+            gap: 10px;
+        }
+
+        .mt-20 {
+            margin-top: 20px;
+        }
+
+        .mb-20 {
+            margin-bottom: 20px;
+        }
+
+        /* ==================== BADGE ==================== */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .badge-success {
+            background: rgba(46, 189, 133, 0.2);
+            color: var(--green);
+            border: 1px solid var(--green);
+        }
+
+        .badge-warning {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+            border: 1px solid #fbbf24;
+        }
+
+        .badge-danger {
+            background: rgba(246, 70, 93, 0.2);
+            color: var(--red);
+            border: 1px solid var(--red);
+        }
+
+        .badge-info {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--blue);
+            border: 1px solid var(--blue);
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 768px) {
+            .nav {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .nav-left {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .admin-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .order-item {
+                grid-template-columns: 1fr;
+            }
+
+            .support-panel {
+                width: 90%;
+                right: 5%;
+            }
+        }
+
+        /* ==================== ANIMACIONES ==================== */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ==================== VISTA DE AUTENTICACIÓN ==================== -->
+    <div id="viewAuth" class="container container-sm" style="margin-top: 100px;">
+        <div class="card text-center fade-in">
+            <h1 class="nav-logo" style="font-size: 32px; margin-bottom: 10px;">PLATINUM</h1>
+            <p style="font-size: 11px; color: gray; letter-spacing: 3px; margin-bottom: 40px;">ELITE P2P NETWORK</p>
+            
+            <input type="email" id="authEmail" placeholder="Correo Electrónico">
+            <input type="password" id="authPassword" placeholder="Contraseña">
+            
+            <button class="btn btn-primary" onclick="login()">INICIAR SESIÓN</button>
+            <p style="margin-top: 15px; color: #666; font-size: 13px;">
+                ¿No tienes cuenta? Se creará automáticamente
+            </p>
+        </div>
+    </div>
+
+    <!-- ==================== VISTA PRINCIPAL ==================== -->
+    <div id="viewMain" class="hidden">
+        <!-- Navegación -->
+        <div class="nav">
+            <div class="nav-left">
+                <div class="nav-logo">PLATINUM</div>
+                <div class="nav-item" onclick="showTab('mercado')">Mercado</div>
+                <div class="nav-item" onclick="showTab('perfil')">Mi Perfil</div>
+                <div class="nav-item" id="navAdmin" class="hidden" onclick="showTab('admin')">Panel Admin</div>
+            </div>
+            <div class="nav-balance">
+                <small>BALANCE DISPONIBLE</small>
+                <div>
+                    <span class="balance-amount" id="navBalanceUsdt">0.00</span>
+                    <small style="color: var(--gold);"> USDT</small>
                 </div>
-            \`).join('');
+                <small style="color: #666;">Bloqueado: <span id="navBalanceLocked">0.00</span> USDT</small>
+            </div>
+        </div>
+
+        <!-- ==================== TAB MERCADO ==================== -->
+        <div id="tabMercado" class="container">
+            <div class="filters">
+                <select id="filterCountry" onchange="updateFilters()">
+                    <option value="">Todos los Países</option>
+                </select>
+                <select id="filterBank" onchange="loadOrders()">
+                    <option value="">Todos los Bancos</option>
+                </select>
+                <select id="filterType" onchange="loadOrders()">
+                    <option value="">Compra y Venta</option>
+                    <option value="VENTA">Solo Venta</option>
+                    <option value="COMPRA">Solo Compra</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📢 Crear Anuncio de Venta</div>
+                
+                <select id="createCountry" onchange="updateCreateBanks()">
+                    <option value="">Seleccionar País</option>
+                </select>
+                
+                <select id="createBank">
+                    <option value="">Seleccionar Banco</option>
+                </select>
+                
+                <input type="number" id="createAmount" placeholder="Cantidad USDT a vender" step="0.01">
+                
+                <input type="number" id="createPrice" placeholder="Precio Total en Moneda Local" step="0.01">
+                
+                <input type="number" id="createMinLimit" placeholder="Límite Mínimo (opcional)" step="0.01">
+                
+                <input type="number" id="createMaxLimit" placeholder="Límite Máximo (opcional)" step="0.01">
+                
+                <textarea id="createTerms" placeholder="Términos y condiciones (opcional)" rows="3"></textarea>
+                
+                <button class="btn btn-primary" onclick="createOrder()">PUBLICAR ANUNCIO</button>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🏪 Ofertas Disponibles</div>
+                <div id="ordersList"></div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB PERFIL ==================== -->
+        <div id="tabPerfil" class="container container-sm hidden">
+            <div class="card text-center">
+                <div class="profile-avatar" id="profileAvatar">U</div>
+                <h2 style="color: var(--gold); margin-bottom: 10px;" id="profileUsername">Usuario</h2>
+                <div class="reputation" id="profileReputation"></div>
+                
+                <div style="margin: 30px 0;">
+                    <div class="profile-stat">
+                        <label>Email</label>
+                        <value id="profileEmail">-</value>
+                    </div>
+                    <div class="profile-stat">
+                        <label>UUID</label>
+                        <value id="profileUuid" style="font-size: 11px;">-</value>
+                    </div>
+                    <div class="profile-stat">
+                        <label>KYC Status</label>
+                        <value id="profileKyc">-</value>
+                    </div>
+                    <div class="profile-stat">
+                        <label>Balance Total</label>
+                        <value><span id="profileBalance">0.00</span> USDT</value>
+                    </div>
+                    <div class="profile-stat">
+                        <label>Balance Bloqueado</label>
+                        <value><span id="profileLocked">0.00</span> USDT</value>
+                    </div>
+                    <div class="profile-stat">
+                        <label>Total de Operaciones</label>
+                        <value id="profileTrades">0</value>
+                    </div>
+                    <div class="profile-stat">
+                        <label>País</label>
+                        <value id="profileCountry">-</value>
+                    </div>
+                    <div class="profile-stat">
+                        <label>Miembro Desde</label>
+                        <value id="profileSince">-</value>
+                    </div>
+                </div>
+
+                <button class="btn btn-danger" onclick="logout()">CERRAR SESIÓN</button>
+            </div>
+        </div>
+
+        <!-- ==================== TAB CHAT ==================== -->
+        <div id="tabChat" class="container container-sm hidden">
+            <div class="card">
+                <div class="flex-between mb-20">
+                    <h3 style="color: var(--gold);">💬 Chat de Orden</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="showTab('mercado')">Volver</button>
+                </div>
+
+                <div id="chatOrderInfo" class="mb-20"></div>
+
+                <div class="chat-box" id="chatBox"></div>
+
+                <div class="flex gap-10 mb-20">
+                    <input type="text" id="chatInput" placeholder="Escribe un mensaje..." style="margin: 0;">
+                    <button class="btn btn-primary btn-sm" onclick="sendMessage()" style="width: 60px;">➤</button>
+                </div>
+
+                <div class="flex gap-10">
+                    <button class="btn btn-success" onclick="releasePayment()" id="btnRelease">✓ HE RECIBIDO EL PAGO</button>
+                    <button class="btn btn-danger" onclick="cancelOrder()">✗ CANCELAR</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB ADMIN ==================== -->
+        <div id="tabAdmin" class="container hidden">
+            <div class="admin-header">
+                <h1>⚙️ PANEL DE ADMINISTRACIÓN</h1>
+                <p>Control Total del Sistema P2P</p>
+            </div>
+
+            <div class="admin-stats">
+                <div class="admin-stat-card">
+                    <span class="number" id="adminStatUsers">0</span>
+                    <span class="label">Usuarios Totales</span>
+                </div>
+                <div class="admin-stat-card">
+                    <span class="number" id="adminStatOrders">0</span>
+                    <span class="label">Órdenes Activas</span>
+                </div>
+                <div class="admin-stat-card">
+                    <span class="number" id="adminStatCompleted">0</span>
+                    <span class="label">Completadas</span>
+                </div>
+                <div class="admin-stat-card">
+                    <span class="number" id="adminStatSupport">0</span>
+                    <span class="label">Tickets Abiertos</span>
+                </div>
+            </div>
+
+            <!-- Usuarios -->
+            <div class="card">
+                <div class="card-title">👥 Gestión de Usuarios</div>
+                <div style="overflow-x: auto;">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Usuario</th>
+                                <th>Email</th>
+                                <th>Balance</th>
+                                <th>Reputación</th>
+                                <th>Operaciones</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminUsersList"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Órdenes -->
+            <div class="card">
+                <div class="card-title">📋 Todas las Órdenes</div>
+                <div style="overflow-x: auto;">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Vendedor</th>
+                                <th>Comprador</th>
+                                <th>Monto USDT</th>
+                                <th>Precio Total</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminOrdersList"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SOPORTE FLOTANTE ==================== -->
+    <div class="support-float" id="supportFloat" style="display: none;">
+        <button class="support-btn" onclick="toggleSupport()">💬</button>
+    </div>
+
+    <div class="support-panel" id="supportPanel">
+        <div class="support-header">
+            <h3>Soporte Técnico</h3>
+            <button class="support-close" onclick="toggleSupport()">✕</button>
+        </div>
+        <div class="chat-box" id="supportChatBox" style="height: 300px;"></div>
+        <div style="padding: 15px;">
+            <div class="flex gap-10">
+                <input type="text" id="supportInput" placeholder="Escribe tu consulta..." style="margin: 0;">
+                <button class="btn btn-primary btn-sm" onclick="sendSupportMessage()" style="width: 60px;">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== JAVASCRIPT ==================== -->
+    <script>
+        const socket = io();
+        let currentUser = null;
+        let currentOrder = null;
+        let currentTicket = null;
+        let countries = [];
+        let banks = [];
+
+        // ==================== INICIALIZACIÓN ====================
+        window.onload = function() {
+            checkSession();
+        };
+
+        function checkSession() {
+            const savedUser = localStorage.getItem('platinum_user');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                showMainView();
+            }
         }
 
-        function abrirChat(id) {
-            activeOrd = id;
-            viewChat.classList.remove('hidden');
-            tab-mercado.classList.add('hidden');
-            document.getElementById('chat-box').innerHTML = "";
-            socket.emit('unirse_p2p', id);
+        // ==================== AUTENTICACIÓN ====================
+        async function login() {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+
+            if (!email || !password) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    currentUser = data.user;
+                    localStorage.setItem('platinum_user', JSON.stringify(currentUser));
+                    showMainView();
+                } else {
+                    alert(data.error || 'Error al iniciar sesión');
+                }
+            } catch (err) {
+                alert('Error de conexión: ' + err.message);
+            }
         }
 
-        function enviarMsg() {
-            const text = msgInput.value;
-            if(!text) return;
-            socket.emit('msg_p2p', { order_id: activeOrd, sender_id: me.id, username: me.username, text });
-            msgInput.value = "";
+        function logout() {
+            localStorage.removeItem('platinum_user');
+            location.reload();
         }
 
-        socket.on('update_chat', (data) => {
-            const box = document.getElementById('chat-box');
-            const clase = data.username === me.username ? 'msg-me' : 'msg-other';
-            box.innerHTML += \`<div class="msg-line \${clase}"><b>\${data.username}:</b> \${data.text}</div>\`;
-            box.scrollTop = box.scrollHeight;
+        function showMainView() {
+            document.getElementById('viewAuth').classList.add('hidden');
+            document.getElementById('viewMain').classList.remove('hidden');
+            document.getElementById('supportFloat').style.display = 'block';
+
+            updateNavbar();
+            loadCountries();
+            loadOrders();
+            updateProfile();
+
+            if (currentUser.username === 'admin') {
+                document.getElementById('navAdmin').classList.remove('hidden');
+            }
+
+            createSupportTicket();
+        }
+
+        function updateNavbar() {
+            document.getElementById('navBalanceUsdt').textContent = parseFloat(currentUser.balance_usdt).toFixed(2);
+            document.getElementById('navBalanceLocked').textContent = parseFloat(currentUser.balance_locked || 0).toFixed(2);
+        }
+
+        // ==================== TABS ====================
+        function showTab(tab) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            
+            document.getElementById('tabMercado').classList.add('hidden');
+            document.getElementById('tabPerfil').classList.add('hidden');
+            document.getElementById('tabChat').classList.add('hidden');
+            document.getElementById('tabAdmin').classList.add('hidden');
+
+            if (tab === 'mercado') {
+                document.getElementById('tabMercado').classList.remove('hidden');
+                loadOrders();
+            } else if (tab === 'perfil') {
+                document.getElementById('tabPerfil').classList.remove('hidden');
+                updateProfile();
+            } else if (tab === 'admin') {
+                document.getElementById('tabAdmin').classList.remove('hidden');
+                loadAdminData();
+            }
+
+            event?.target?.classList.add('active');
+        }
+
+        // ==================== PAÍSES Y BANCOS ====================
+        async function loadCountries() {
+            const res = await fetch('/api/countries');
+            countries = await res.json();
+
+            const filterCountry = document.getElementById('filterCountry');
+            const createCountry = document.getElementById('createCountry');
+
+            countries.forEach(country => {
+                const option1 = document.createElement('option');
+                option1.value = country.id;
+                option1.textContent = `${country.name} (${country.currency_code})`;
+                filterCountry.appendChild(option1);
+
+                const option2 = document.createElement('option');
+                option2.value = country.id;
+                option2.textContent = `${country.name} (${country.currency_code})`;
+                createCountry.appendChild(option2);
+            });
+        }
+
+        async function updateFilters() {
+            const countryId = document.getElementById('filterCountry').value;
+            const filterBank = document.getElementById('filterBank');
+
+            filterBank.innerHTML = '<option value="">Todos los Bancos</option>';
+
+            if (countryId) {
+                const res = await fetch(`/api/banks/${countryId}`);
+                const banks = await res.json();
+
+                banks.forEach(bank => {
+                    const option = document.createElement('option');
+                    option.value = bank.id;
+                    option.textContent = bank.name;
+                    filterBank.appendChild(option);
+                });
+            }
+
+            loadOrders();
+        }
+
+        async function updateCreateBanks() {
+            const countryId = document.getElementById('createCountry').value;
+            const createBank = document.getElementById('createBank');
+
+            createBank.innerHTML = '<option value="">Seleccionar Banco</option>';
+
+            if (countryId) {
+                const res = await fetch(`/api/banks/${countryId}`);
+                const banks = await res.json();
+
+                banks.forEach(bank => {
+                    const option = document.createElement('option');
+                    option.value = bank.id;
+                    option.textContent = bank.name;
+                    createBank.appendChild(option);
+                });
+            }
+        }
+
+        // ==================== ÓRDENES ====================
+        async function loadOrders() {
+            const country = document.getElementById('filterCountry').value;
+            const bank = document.getElementById('filterBank').value;
+            const type = document.getElementById('filterType').value;
+
+            const params = new URLSearchParams();
+            if (country) params.append('country', country);
+            if (bank) params.append('bank', bank);
+            if (type) params.append('type', type);
+
+            const res = await fetch(`/api/ordenes?${params}`);
+            const orders = await res.json();
+
+            const ordersList = document.getElementById('ordersList');
+
+            if (orders.length === 0) {
+                ordersList.innerHTML = '<p style="text-align:center; color:#666; padding:40px;">No hay ofertas disponibles</p>';
+                return;
+            }
+
+            ordersList.innerHTML = orders.map(order => `
+                <div class="order-item">
+                    <div class="order-info">
+                        <h4>${order.bank_name} - ${order.country_name}</h4>
+                        <p>Vendedor: <strong>${order.seller_username}</strong> ${renderReputation(order.seller_reputation)}</p>
+                        <p>Cantidad: <strong>${order.amount_usdt} USDT</strong></p>
+                        <p>Límites: ${order.min_limit || order.amount_usdt} - ${order.max_limit || order.amount_usdt} USDT</p>
+                        ${order.terms ? `<p style="font-size:12px; margin-top:8px;">${order.terms}</p>` : ''}
+                    </div>
+                    <div class="order-price">
+                        <span class="price">${parseFloat(order.price_total).toFixed(2)}</span>
+                        <span class="currency">${order.currency_code}</span>
+                        <br><br>
+                        <button class="btn btn-primary btn-sm" onclick="takeOrder('${order.order_id}')">
+                            COMPRAR
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function createOrder() {
+            const countryId = document.getElementById('createCountry').value;
+            const bankId = document.getElementById('createBank').value;
+            const amount = document.getElementById('createAmount').value;
+            const price = document.getElementById('createPrice').value;
+            const minLimit = document.getElementById('createMinLimit').value;
+            const maxLimit = document.getElementById('createMaxLimit').value;
+            const terms = document.getElementById('createTerms').value;
+
+            if (!countryId || !bankId || !amount || !price) {
+                alert('Por favor completa los campos obligatorios');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/crear-orden', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        seller_id: currentUser.id,
+                        amount: parseFloat(amount),
+                        price_total: parseFloat(price),
+                        bank_id: parseInt(bankId),
+                        country_id: parseInt(countryId),
+                        order_type: 'VENTA',
+                        min_limit: minLimit ? parseFloat(minLimit) : null,
+                        max_limit: maxLimit ? parseFloat(maxLimit) : null,
+                        terms: terms
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    alert('✅ Anuncio publicado exitosamente');
+                    document.getElementById('createAmount').value = '';
+                    document.getElementById('createPrice').value = '';
+                    document.getElementById('createMinLimit').value = '';
+                    document.getElementById('createMaxLimit').value = '';
+                    document.getElementById('createTerms').value = '';
+                    loadOrders();
+                    
+                    // Actualizar balance del usuario
+                    const userRes = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ 
+                            email: currentUser.email, 
+                            password: 'temp' // Se usa el mecanismo de auto-login
+                        })
+                    });
+                } else {
+                    alert('❌ ' + (data.error || 'Error al crear orden'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function takeOrder(orderId) {
+            try {
+                const res = await fetch('/api/tomar-orden', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        order_id: orderId,
+                        buyer_id: currentUser.id
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    currentOrder = orderId;
+                    openChat(orderId);
+                } else {
+                    alert('❌ ' + (data.error || 'Error al tomar orden'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // ==================== CHAT ====================
+        function openChat(orderId) {
+            currentOrder = orderId;
+            document.getElementById('tabMercado').classList.add('hidden');
+            document.getElementById('tabChat').classList.remove('hidden');
+
+            document.getElementById('chatBox').innerHTML = '';
+            socket.emit('unirse_p2p', orderId);
+        }
+
+        socket.on('historial_chat', (messages) => {
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = '';
+            
+            messages.forEach(msg => {
+                appendMessage(msg);
+            });
         });
 
-        async function crearAnuncio() {
-            await fetch('/api/crear-orden', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ seller_id: me.id, amount: vMonto.value, price: vPrecio.value, bank: vBank.value })
-            });
-            vMonto.value = ""; vPrecio.value = "";
-            cargarMercado();
+        socket.on('update_chat', (message) => {
+            appendMessage(message);
+        });
+
+        function appendMessage(msg) {
+            const chatBox = document.getElementById('chatBox');
+            
+            let className = 'msg-other';
+            if (msg.is_system) {
+                className = 'msg-system';
+            } else if (msg.sender_username === currentUser.username) {
+                className = 'msg-me';
+            } else if (msg.is_admin) {
+                className = 'msg-admin';
+            }
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg-line ${className}`;
+            
+            if (!msg.is_system) {
+                msgDiv.innerHTML = `<strong>${msg.sender_username}:</strong> ${msg.text}`;
+            } else {
+                msgDiv.textContent = msg.text;
+            }
+
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        function verTab(t) {
-            document.getElementById('tab-mercado').classList.toggle('hidden', t !== 'mercado');
-            document.getElementById('tab-perfil').classList.toggle('hidden', t !== 'perfil');
-            viewChat.classList.add('hidden');
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+
+            if (!text) return;
+
+            socket.emit('msg_p2p', {
+                order_id: currentOrder,
+                sender_id: currentUser.id,
+                username: currentUser.username,
+                text: text
+            });
+
+            input.value = '';
         }
+
+        async function releasePayment() {
+            if (!confirm('¿Confirmas que has recibido el pago?')) return;
+
+            try {
+                const res = await fetch('/api/liberar-fondos', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        order_id: currentOrder,
+                        user_id: currentUser.id
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    alert('✅ Fondos liberados exitosamente');
+                    showTab('mercado');
+                } else {
+                    alert('❌ ' + (data.error || 'Error al liberar fondos'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function cancelOrder() {
+            if (!confirm('¿Estás seguro de cancelar esta orden?')) return;
+
+            try {
+                const res = await fetch('/api/cancelar-orden', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        order_id: currentOrder,
+                        user_id: currentUser.id
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    alert('Orden cancelada');
+                    showTab('mercado');
+                } else {
+                    alert('❌ ' + (data.error || 'Error al cancelar'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // ==================== PERFIL ====================
+        function updateProfile() {
+            document.getElementById('profileAvatar').textContent = currentUser.username[0].toUpperCase();
+            document.getElementById('profileUsername').textContent = currentUser.username.toUpperCase();
+            document.getElementById('profileEmail').textContent = currentUser.email;
+            document.getElementById('profileUuid').textContent = currentUser.uuid || 'N/A';
+            document.getElementById('profileKyc').textContent = currentUser.kyc_status || 'NO VERIFICADO';
+            document.getElementById('profileBalance').textContent = parseFloat(currentUser.balance_usdt).toFixed(2);
+            document.getElementById('profileLocked').textContent = parseFloat(currentUser.balance_locked || 0).toFixed(2);
+            document.getElementById('profileTrades').textContent = currentUser.total_trades || 0;
+            document.getElementById('profileCountry').textContent = currentUser.country || 'Venezuela';
+            document.getElementById('profileSince').textContent = new Date(currentUser.created_at).toLocaleDateString();
+            
+            document.getElementById('profileReputation').innerHTML = renderReputation(currentUser.reputation || 0);
+        }
+
+        function renderReputation(rep) {
+            const stars = Math.round(parseFloat(rep || 0));
+            let html = '<span class="reputation">';
+            for (let i = 1; i <= 5; i++) {
+                html += `<span class="star ${i <= stars ? 'filled' : ''}">★</span>`;
+            }
+            html += '</span>';
+            return html;
+        }
+
+        // ==================== SOPORTE ====================
+        async function createSupportTicket() {
+            const res = await fetch('/api/soporte/crear', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    user_id: currentUser.id,
+                    username: currentUser.username
+                })
+            });
+
+            const data = await res.json();
+            currentTicket = data.ticket.ticket_id;
+            
+            socket.emit('unirse_soporte', currentTicket);
+        }
+
+        socket.on('historial_soporte', (messages) => {
+            const chatBox = document.getElementById('supportChatBox');
+            chatBox.innerHTML = '';
+            
+            messages.forEach(msg => {
+                appendSupportMessage(msg);
+            });
+        });
+
+        socket.on('update_soporte', (message) => {
+            appendSupportMessage(message);
+        });
+
+        function appendSupportMessage(msg) {
+            const chatBox = document.getElementById('supportChatBox');
+            
+            const className = msg.is_admin ? 'msg-admin' : 
+                            (msg.sender_username === currentUser.username ? 'msg-me' : 'msg-other');
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg-line ${className}`;
+            msgDiv.innerHTML = `<strong>${msg.sender_username}:</strong> ${msg.text}`;
+
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function toggleSupport() {
+            document.getElementById('supportPanel').classList.toggle('active');
+        }
+
+        function sendSupportMessage() {
+            const input = document.getElementById('supportInput');
+            const text = input.value.trim();
+
+            if (!text) return;
+
+            socket.emit('msg_soporte', {
+                ticket_id: currentTicket,
+                sender_id: currentUser.id,
+                username: currentUser.username,
+                text: text,
+                is_admin: currentUser.username === 'admin'
+            });
+
+            input.value = '';
+        }
+
+        // ==================== ADMIN ====================
+        async function loadAdminData() {
+            // Cargar usuarios
+            const usersRes = await fetch('/api/admin/usuarios');
+            const users = await usersRes.json();
+
+            document.getElementById('adminStatUsers').textContent = users.length;
+
+            const usersList = document.getElementById('adminUsersList');
+            usersList.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.id}</td>
+                    <td>${user.username}</td>
+                    <td>${user.email}</td>
+                    <td>${parseFloat(user.balance_usdt).toFixed(2)} USDT</td>
+                    <td>${renderReputation(user.reputation)}</td>
+                    <td>${user.total_trades}</td>
+                    <td>
+                        ${user.is_banned ? 
+                            '<span class="badge badge-danger">BANEADO</span>' : 
+                            '<span class="badge badge-success">ACTIVO</span>'}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm ${user.is_banned ? 'btn-success' : 'btn-danger'}" 
+                                onclick="toggleBan(${user.id}, ${!user.is_banned})">
+                            ${user.is_banned ? 'Desbanear' : 'Banear'}
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            // Cargar órdenes
+            const ordersRes = await fetch('/api/admin/ordenes');
+            const orders = await ordersRes.json();
+
+            const activeOrders = orders.filter(o => o.status === 'ABIERTA' || o.status === 'EN_PROCESO');
+            const completed = orders.filter(o => o.status === 'COMPLETADA');
+
+            document.getElementById('adminStatOrders').textContent = activeOrders.length;
+            document.getElementById('adminStatCompleted').textContent = completed.length;
+
+            const ordersList = document.getElementById('adminOrdersList');
+            ordersList.innerHTML = orders.slice(0, 50).map(order => `
+                <tr>
+                    <td style="font-size:11px;">${order.order_id.substring(0, 8)}...</td>
+                    <td>${order.seller_username || 'N/A'}</td>
+                    <td>${order.buyer_username || '-'}</td>
+                    <td>${order.amount_usdt} USDT</td>
+                    <td>${order.price_total} ${order.currency_code}</td>
+                    <td>
+                        <span class="badge badge-${
+                            order.status === 'COMPLETADA' ? 'success' :
+                            order.status === 'EN_PROCESO' ? 'warning' :
+                            order.status === 'CANCELADA' ? 'danger' : 'info'
+                        }">${order.status}</span>
+                    </td>
+                    <td>
+                        ${order.status === 'EN_PROCESO' ? 
+                            `<button class="btn btn-sm btn-primary" onclick="openChat('${order.order_id}')">Ver Chat</button>` : 
+                            '-'}
+                    </td>
+                </tr>
+            `).join('');
+
+            // Cargar tickets de soporte
+            const supportRes = await fetch('/api/soporte/tickets');
+            const tickets = await supportRes.json();
+            const openTickets = tickets.filter(t => t.status === 'ABIERTO');
+            document.getElementById('adminStatSupport').textContent = openTickets.length;
+        }
+
+        async function toggleBan(userId, banned) {
+            const res = await fetch('/api/admin/ban-user', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user_id: userId, banned })
+            });
+
+            if (res.ok) {
+                alert(banned ? 'Usuario baneado' : 'Usuario desbaneado');
+                loadAdminData();
+            }
+        }
+
+        // Listener para Enter en inputs
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                if (e.target.id === 'chatInput') sendMessage();
+                if (e.target.id === 'supportInput') sendSupportMessage();
+                if (e.target.id === 'authPassword') login();
+            }
+        });
     </script>
+
 </body>
 </html>
-`;
