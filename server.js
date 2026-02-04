@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 const app = express();
@@ -12,261 +13,666 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
 app.use(cors());
+app.use(express.static('public'));
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// --- 1. DEFINICIÓN DE LA INTERFAZ (DEBE IR ARRIBA) ---
-const mainHTML = `
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Platinum Elite P2P</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <style>
-        :root { --gold: #d4af37; --dark: #0a0a0a; --card: #151515; --green: #2ebd85; --red: #f6465d; }
-        body { background: var(--dark); color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; }
-        .nav { background: #000; padding: 15px; display: flex; justify-content: space-around; border-bottom: 2px solid var(--gold); position: sticky; top:0; z-index:100; align-items: center;}
-        .nav b { cursor: pointer; color: var(--gold); font-size: 13px; text-transform: uppercase; }
-        .container { max-width: 500px; margin: auto; padding: 15px; }
-        .card { background: var(--card); border: 1px solid #222; padding: 20px; border-radius: 15px; margin-bottom: 15px; }
-        input, select { background: #111; color: #fff; border: 1px solid #333; padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; font-size: 16px; }
-        button { background: linear-gradient(45deg, #d4af37, #f2d06b); border: none; padding: 14px; cursor: pointer; font-weight: bold; border-radius: 8px; width: 100%; color: #000; }
-        #chat-box { height: 350px; overflow-y: auto; background: #050505; padding: 15px; border-radius: 10px; border: 1px solid #222; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
-        .msg-line { padding: 10px 14px; border-radius: 15px; max-width: 80%; font-size: 0.95em; line-height: 1.4; }
-        .msg-me { background: var(--gold); color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
-        .msg-other { background: #2a2a2a; align-self: flex-start; border-bottom-left-radius: 2px; }
-        .hidden { display: none; }
-        .order-item { border-left: 3px solid var(--gold); padding: 15px; background: #1a1a1a; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-    </style>
-</head>
-<body>
-    <div id="viewAuth" class="container" style="margin-top:80px">
-        <div class="card" style="text-align:center">
-            <h1 style="color:var(--gold); letter-spacing:4px; margin-bottom:5px">PLATINUM</h1>
-            <p style="font-size:10px; color:gray; letter-spacing:2px; margin-bottom:30px">ELITE P2P NETWORK</p>
-            <input type="email" id="email" placeholder="Correo Electrónico">
-            <input type="password" id="pass" placeholder="Contraseña">
-            <button onclick="auth()">INICIAR SESIÓN</button>
-        </div>
-    </div>
+// ==================== INICIALIZACIÓN DE BASE DE DATOS ====================
+async function initDB() {
+    try {
+        await pool.query(`
+            -- Tabla de Usuarios
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                uuid UUID DEFAULT gen_random_uuid() UNIQUE,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                balance_usdt DECIMAL(18,2) DEFAULT 1000.00,
+                balance_locked DECIMAL(18,2) DEFAULT 0.00,
+                kyc_status TEXT DEFAULT 'NO VERIFICADO',
+                reputation DECIMAL(3,2) DEFAULT 0.00,
+                total_trades INTEGER DEFAULT 0,
+                is_banned BOOLEAN DEFAULT false,
+                country TEXT DEFAULT 'Venezuela',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
 
-    <div id="viewMain" class="hidden">
-        <div class="nav">
-            <b onclick="verTab('mercado')">Mercado</b>
-            <b onclick="verTab('perfil')">Perfil</b>
-            <div style="text-align:right">
-                <small style="color:gray; font-size:10px">BALANCE</small><br>
-                <b id="valSaldo" style="font-size:14px">0.00</b> <small style="color:var(--gold)">USDT</small>
-            </div>
-        </div>
+            -- Tabla de Países y Configuración
+            CREATE TABLE IF NOT EXISTS countries (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                currency_code TEXT NOT NULL,
+                reference_price DECIMAL(18,2) DEFAULT 36.50,
+                is_active BOOLEAN DEFAULT true
+            );
 
-        <div class="container">
-            <div id="tab-mercado">
-                <div class="card">
-                    <h4 style="margin-top:0; color:var(--gold)">CREAR ANUNCIO DE VENTA</h4>
-                    <select id="vBank">
-                        <option value="Banesco">Banesco</option>
-                        <option value="Pago Móvil">Pago Móvil</option>
-                        <option value="Mercantil">Mercantil</option>
-                        <option value="BBVA Provincial">BBVA Provincial</option>
-                    </select>
-                    <input type="number" id="vMonto" placeholder="Monto USDT">
-                    <input type="number" id="vPrecio" placeholder="Precio Total Bs">
-                    <button onclick="crearAnuncio()">PUBLICAR AHORA</button>
-                </div>
-                <h4 style="color:gray">OFERTAS DISPONIBLES</h4>
-                <div id="listaOrdenes"></div>
-            </div>
+            -- Tabla de Bancos por País
+            CREATE TABLE IF NOT EXISTS banks (
+                id SERIAL PRIMARY KEY,
+                country_id INTEGER REFERENCES countries(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT true,
+                UNIQUE(country_id, name)
+            );
 
-            <div id="tab-perfil" class="hidden">
-                <div class="card" style="text-align:center">
-                    <div style="width:70px; height:70px; background:var(--gold); border-radius:50%; margin: 0 auto 15px; display:flex; align-items:center; justify-content:center; color:#000; font-size:24px; font-weight:bold" id="avatar">U</div>
-                    <h2 id="profUser" style="margin:5px 0"></h2>
-                    <p id="profKyc" style="color:var(--green); font-size:12px; font-weight:bold"></p>
-                    <hr style="border:0; border-top:1px solid #333; margin:20px 0">
-                    <button onclick="location.reload()" style="background:#222; color:var(--red); border:1px solid var(--red)">CERRAR SESIÓN</button>
-                </div>
-            </div>
+            -- Tabla de Órdenes P2P
+            CREATE TABLE IF NOT EXISTS orders (
+                order_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                seller_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                buyer_id INTEGER,
+                amount_usdt DECIMAL(18,2) NOT NULL,
+                price_total DECIMAL(18,2) NOT NULL,
+                price_unit DECIMAL(18,6),
+                bank_id INTEGER REFERENCES banks(id),
+                bank_name TEXT,
+                country_id INTEGER REFERENCES countries(id),
+                currency_code TEXT,
+                order_type TEXT CHECK (order_type IN ('VENTA', 'COMPRA')),
+                status TEXT DEFAULT 'ABIERTA' CHECK (status IN ('ABIERTA', 'EN_PROCESO', 'COMPLETADA', 'CANCELADA', 'DISPUTA')),
+                min_limit DECIMAL(18,2),
+                max_limit DECIMAL(18,2),
+                terms TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP
+            );
 
-            <div id="viewChat" class="hidden">
-                <div class="card" style="padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center">
-                    <b style="color:var(--gold)">ORDEN EN PROCESO</b>
-                    <button onclick="verTab('mercado')" style="width:auto; padding:5px 15px; background:transparent; color:var(--red)">CANCELAR</button>
-                </div>
-                <div id="chat-box"></div>
-                <div style="display:flex; gap:8px">
-                    <input type="text" id="msgInput" style="margin:0" placeholder="Escribe un mensaje...">
-                    <button onclick="enviarMsg()" style="width:60px; font-size:20px">></button>
-                </div>
-                <button style="background:var(--green); color:white; margin-top:15px; height:55px; font-size:16px">HE RECIBIDO EL PAGO</button>
-            </div>
-        </div>
-    </div>
+            -- Tabla de Garantía (Escrow)
+            CREATE TABLE IF NOT EXISTS escrow (
+                id SERIAL PRIMARY KEY,
+                order_id UUID REFERENCES orders(order_id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id),
+                amount_locked DECIMAL(18,2) NOT NULL,
+                status TEXT DEFAULT 'LOCKED' CHECK (status IN ('LOCKED', 'RELEASED', 'RETURNED')),
+                locked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                released_at TIMESTAMP
+            );
 
-    <script>
-        const socket = io();
-        let me = null, activeOrd = null;
+            -- Tabla de Mensajes de Chat (Persistente)
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                order_id UUID REFERENCES orders(order_id) ON DELETE CASCADE,
+                sender_id INTEGER REFERENCES users(id),
+                sender_username TEXT,
+                text TEXT NOT NULL,
+                is_system BOOLEAN DEFAULT false,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
 
-        async function auth() {
-            const res = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email: email.value, password: pass.value })
-            });
-            const data = await res.json();
-            if(data.success) {
-                me = data.user;
-                viewAuth.classList.add('hidden');
-                viewMain.classList.remove('hidden');
-                valSaldo.innerText = me.balance_usdt;
-                profUser.innerText = me.username.toUpperCase();
-                profKyc.innerText = "VERIFICADO • " + me.kyc_status;
-                avatar.innerText = me.username[0].toUpperCase();
-                cargarMercado();
-            } else { alert("Error de acceso"); }
+            -- Tabla de Soporte Técnico
+            CREATE TABLE IF NOT EXISTS support_tickets (
+                ticket_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                username TEXT,
+                status TEXT DEFAULT 'ABIERTO' CHECK (status IN ('ABIERTO', 'EN_REVISION', 'CERRADO')),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP
+            );
+
+            -- Tabla de Mensajes de Soporte
+            CREATE TABLE IF NOT EXISTS support_messages (
+                id SERIAL PRIMARY KEY,
+                ticket_id UUID REFERENCES support_tickets(ticket_id) ON DELETE CASCADE,
+                sender_id INTEGER REFERENCES users(id),
+                sender_username TEXT,
+                is_admin BOOLEAN DEFAULT false,
+                text TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- Tabla de Transacciones (Historial)
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                order_id UUID REFERENCES orders(order_id),
+                type TEXT CHECK (type IN ('DEPOSIT', 'WITHDRAWAL', 'TRADE_BUY', 'TRADE_SELL', 'ESCROW_LOCK', 'ESCROW_RELEASE')),
+                amount DECIMAL(18,2),
+                balance_before DECIMAL(18,2),
+                balance_after DECIMAL(18,2),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- Insertar datos iniciales si no existen
+            INSERT INTO countries (name, currency_code, reference_price) VALUES
+                ('Venezuela', 'VES', 36.50),
+                ('Colombia', 'COP', 4200.00),
+                ('Argentina', 'ARS', 1050.00),
+                ('México', 'MXN', 18.50),
+                ('Perú', 'PEN', 3.75)
+            ON CONFLICT (name) DO NOTHING;
+
+            -- Insertar bancos de Venezuela
+            INSERT INTO banks (country_id, name) VALUES
+                ((SELECT id FROM countries WHERE name = 'Venezuela'), 'Banesco'),
+                ((SELECT id FROM countries WHERE name = 'Venezuela'), 'Mercantil'),
+                ((SELECT id FROM countries WHERE name = 'Venezuela'), 'BBVA Provincial'),
+                ((SELECT id FROM countries WHERE name = 'Venezuela'), 'Banco de Venezuela'),
+                ((SELECT id FROM countries WHERE name = 'Venezuela'), 'Pago Móvil')
+            ON CONFLICT DO NOTHING;
+
+            -- Insertar bancos de Colombia
+            INSERT INTO banks (country_id, name) VALUES
+                ((SELECT id FROM countries WHERE name = 'Colombia'), 'Bancolombia'),
+                ((SELECT id FROM countries WHERE name = 'Colombia'), 'Davivienda'),
+                ((SELECT id FROM countries WHERE name = 'Colombia'), 'Nequi'),
+                ((SELECT id FROM countries WHERE name = 'Colombia'), 'BBVA Colombia')
+            ON CONFLICT DO NOTHING;
+
+            -- Crear usuario admin si no existe
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM users WHERE username = 'admin') THEN
+                    INSERT INTO users (username, email, password_hash, balance_usdt, kyc_status, reputation)
+                    VALUES ('admin', 'admin@platinumelite.com', '$2a$10$abcdefghijklmnopqrstuv', 999999.00, 'ADMIN', 5.00);
+                END IF;
+            END $$;
+        `);
+        console.log('✅ Base de datos inicializada correctamente');
+    } catch (err) {
+        console.error('❌ Error inicializando DB:', err);
+    }
+}
+
+// ==================== RUTAS DE AUTENTICACIÓN ====================
+
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { username, email, password, country } = req.body;
+        
+        const existingUser = await pool.query(
+            "SELECT * FROM users WHERE email = $1 OR username = $2",
+            [email.toLowerCase(), username.toLowerCase()]
+        );
+
+        if (existingUser.rows.length > 0) {
+            return res.status(400).json({ error: "Usuario o email ya existe" });
         }
 
-        async function cargarMercado() {
-            const res = await fetch('/api/ordenes');
-            const data = await res.json();
-            listaOrdenes.innerHTML = data.map(o => \`
-                <div class="order-item">
-                    <div>
-                        <b style="font-size:14px">\${o.bank}</b><br>
-                        <small style="color:gray">\${o.amount_usdt} USDT</small>
-                    </div>
-                    <div style="text-align:right">
-                        <b style="color:var(--gold); font-size:18px">\${o.price_ves} Bs</b><br>
-                        <button onclick="abrirChat('\${o.order_id}')" style="width:80px; padding:6px; font-size:11px; margin-top:5px">COMPRAR</button>
-                    </div>
-                </div>
-            \`).join('');
-        }
+        const hash = await bcrypt.hash(password, 10);
+        const result = await pool.query(
+            `INSERT INTO users (username, email, password_hash, country) 
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [username.toLowerCase(), email.toLowerCase(), hash, country || 'Venezuela']
+        );
 
-        function abrirChat(id) {
-            activeOrd = id;
-            viewChat.classList.remove('hidden');
-            document.getElementById('tab-mercado').classList.add('hidden');
-            document.getElementById('tab-perfil').classList.add('hidden');
-            document.getElementById('chat-box').innerHTML = "";
-            socket.emit('unirse_p2p', id);
-        }
-
-        function enviarMsg() {
-            if(!msgInput.value) return;
-            socket.emit('msg_p2p', { 
-                order_id: activeOrd, 
-                sender_id: me.id, 
-                username: me.username, 
-                text: msgInput.value 
-            });
-            msgInput.value = "";
-        }
-
-        socket.on('update_chat', (data) => {
-            const box = document.getElementById('chat-box');
-            const clase = data.username === me.username ? 'msg-me' : 'msg-other';
-            box.innerHTML += \`<div class="msg-line \${clase}"><b>\${data.username}:</b> \${data.text}</div>\`;
-            box.scrollTop = box.scrollHeight;
-        });
-
-        async function crearAnuncio() {
-            if(!vMonto.value || !vPrecio.value) return alert("Completa los datos");
-            await fetch('/api/crear-orden', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ 
-                    seller_id: me.id, 
-                    amount: vMonto.value, 
-                    price: vPrecio.value, 
-                    bank: vBank.value 
-                })
-            });
-            vMonto.value = ""; vPrecio.value = "";
-            cargarMercado();
-            alert("¡Anuncio publicado!");
-        }
-
-        function verTab(t) {
-            document.getElementById('tab-mercado').classList.toggle('hidden', t !== 'mercado');
-            document.getElementById('tab-perfil').classList.toggle('hidden', t !== 'perfil');
-            viewChat.classList.add('hidden');
-            if(t === 'mercado') cargarMercado();
-        }
-    </script>
-</body>
-</html>
-`;
-
-// --- 2. RUTAS Y LÓGICA DEL SERVIDOR ---
-
-app.get('/', (req, res) => res.send(mainHTML));
+        res.json({ success: true, user: sanitizeUser(result.rows[0]) });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        let r = await pool.query("SELECT * FROM users WHERE email = $1", [email.toLowerCase()]);
+        const result = await pool.query("SELECT * FROM users WHERE email = $1", [email.toLowerCase()]);
         
-        if (r.rows.length === 0) {
+        if (result.rows.length === 0) {
+            // Auto-registro para simplificar demo
             const hash = await bcrypt.hash(password, 10);
-            r = await pool.query("INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3) RETURNING *", 
-                [email.split('@')[0], email.toLowerCase(), hash]);
-        } else {
-            const valid = await bcrypt.compare(password, r.rows[0].password_hash);
-            if (!valid) return res.status(401).json({ error: "Clave errada" });
+            const newUser = await pool.query(
+                `INSERT INTO users (username, email, password_hash) 
+                 VALUES ($1, $2, $3) RETURNING *`,
+                [email.split('@')[0], email.toLowerCase(), hash]
+            );
+            return res.json({ success: true, user: sanitizeUser(newUser.rows[0]) });
         }
-        res.json({ success: true, user: r.rows[0] });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+
+        const user = result.rows[0];
+        
+        if (user.is_banned) {
+            return res.status(403).json({ error: "Usuario suspendido" });
+        }
+
+        const valid = await bcrypt.compare(password, user.password_hash);
+        if (!valid) {
+            return res.status(401).json({ error: "Contraseña incorrecta" });
+        }
+
+        res.json({ success: true, user: sanitizeUser(user) });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ==================== RUTAS DE MERCADO ====================
+
+app.get('/api/countries', async (req, res) => {
+    const result = await pool.query(
+        "SELECT * FROM countries WHERE is_active = true ORDER BY name"
+    );
+    res.json(result.rows);
+});
+
+app.get('/api/banks/:countryId', async (req, res) => {
+    const result = await pool.query(
+        "SELECT * FROM banks WHERE country_id = $1 AND is_active = true ORDER BY name",
+        [req.params.countryId]
+    );
+    res.json(result.rows);
 });
 
 app.get('/api/ordenes', async (req, res) => {
-    const r = await pool.query("SELECT * FROM orders WHERE status = 'ABIERTA' ORDER BY price_ves ASC");
-    res.json(r.rows);
+    const { country, bank, type } = req.query;
+    
+    let query = `
+        SELECT o.*, u.username as seller_username, u.reputation as seller_reputation,
+               c.currency_code, b.name as bank_name, c.name as country_name
+        FROM orders o
+        JOIN users u ON o.seller_id = u.id
+        LEFT JOIN countries c ON o.country_id = c.id
+        LEFT JOIN banks b ON o.bank_id = b.id
+        WHERE o.status = 'ABIERTA' AND u.is_banned = false
+    `;
+    
+    const params = [];
+    let paramCount = 1;
+
+    if (country) {
+        query += ` AND o.country_id = $${paramCount}`;
+        params.push(country);
+        paramCount++;
+    }
+
+    if (bank) {
+        query += ` AND o.bank_id = $${paramCount}`;
+        params.push(bank);
+        paramCount++;
+    }
+
+    if (type) {
+        query += ` AND o.order_type = $${paramCount}`;
+        params.push(type);
+        paramCount++;
+    }
+
+    query += " ORDER BY o.created_at DESC";
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
 });
 
 app.post('/api/crear-orden', async (req, res) => {
-    const { seller_id, amount, price, bank } = req.body;
-    await pool.query("INSERT INTO orders (seller_id, amount_usdt, price_ves, bank, status) VALUES ($1,$2,$3,$4,'ABIERTA')", 
-        [seller_id, amount, price, bank]);
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { seller_id, amount, price_total, bank_id, country_id, order_type, min_limit, max_limit, terms } = req.body;
+
+        // Verificar saldo disponible
+        const userResult = await client.query("SELECT balance_usdt FROM users WHERE id = $1", [seller_id]);
+        const user = userResult.rows[0];
+
+        if (order_type === 'VENTA' && user.balance_usdt < parseFloat(amount)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: "Saldo insuficiente" });
+        }
+
+        // Obtener información del banco y país
+        const bankResult = await client.query("SELECT name, country_id FROM banks WHERE id = $1", [bank_id]);
+        const countryResult = await client.query("SELECT currency_code FROM countries WHERE id = $1", [country_id]);
+
+        const price_unit = parseFloat(price_total) / parseFloat(amount);
+
+        // Crear orden
+        const orderResult = await client.query(
+            `INSERT INTO orders (seller_id, amount_usdt, price_total, price_unit, bank_id, bank_name, 
+                                country_id, currency_code, order_type, min_limit, max_limit, terms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+            [seller_id, amount, price_total, price_unit, bank_id, bankResult.rows[0].name,
+             country_id, countryResult.rows[0].currency_code, order_type, 
+             min_limit || amount, max_limit || amount, terms || '']
+        );
+
+        // Si es orden de venta, bloquear fondos en escrow
+        if (order_type === 'VENTA') {
+            await client.query(
+                "UPDATE users SET balance_usdt = balance_usdt - $1, balance_locked = balance_locked + $1 WHERE id = $2",
+                [amount, seller_id]
+            );
+
+            await client.query(
+                "INSERT INTO escrow (order_id, user_id, amount_locked) VALUES ($1, $2, $3)",
+                [orderResult.rows[0].order_id, seller_id, amount]
+            );
+
+            await client.query(
+                `INSERT INTO transactions (user_id, order_id, type, amount, balance_before, balance_after)
+                 VALUES ($1, $2, 'ESCROW_LOCK', $3, $4, $5)`,
+                [seller_id, orderResult.rows[0].order_id, amount, user.balance_usdt, user.balance_usdt - parseFloat(amount)]
+            );
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true, order: orderResult.rows[0] });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/tomar-orden', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { order_id, buyer_id } = req.body;
+
+        const orderResult = await client.query("SELECT * FROM orders WHERE order_id = $1", [order_id]);
+        const order = orderResult.rows[0];
+
+        if (order.status !== 'ABIERTA') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: "Orden no disponible" });
+        }
+
+        await client.query(
+            "UPDATE orders SET status = 'EN_PROCESO', buyer_id = $1 WHERE order_id = $2",
+            [buyer_id, order_id]
+        );
+
+        // Mensaje del sistema
+        await client.query(
+            `INSERT INTO messages (order_id, sender_id, sender_username, text, is_system)
+             VALUES ($1, $2, 'SISTEMA', 'Orden iniciada. Por favor, coordinen el pago.', true)`,
+            [order_id, buyer_id]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/liberar-fondos', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { order_id, user_id } = req.body;
+
+        const orderResult = await client.query(
+            `SELECT o.*, u.username FROM orders o 
+             JOIN users u ON o.seller_id = u.id 
+             WHERE o.order_id = $1`,
+            [order_id]
+        );
+        const order = orderResult.rows[0];
+
+        // Solo el vendedor o admin puede liberar
+        const userResult = await client.query("SELECT username FROM users WHERE id = $1", [user_id]);
+        const isAdmin = userResult.rows[0].username === 'admin';
+        
+        if (order.seller_id !== user_id && !isAdmin) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: "No autorizado" });
+        }
+
+        if (order.status !== 'EN_PROCESO') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: "Orden no está en proceso" });
+        }
+
+        // Liberar escrow al comprador
+        await client.query(
+            "UPDATE escrow SET status = 'RELEASED', released_at = CURRENT_TIMESTAMP WHERE order_id = $1",
+            [order_id]
+        );
+
+        await client.query(
+            "UPDATE users SET balance_usdt = balance_usdt + $1, balance_locked = balance_locked - $1 WHERE id = $2",
+            [order.amount_usdt, order.buyer_id]
+        );
+
+        await client.query(
+            "UPDATE orders SET status = 'COMPLETADA', completed_at = CURRENT_TIMESTAMP WHERE order_id = $1",
+            [order_id]
+        );
+
+        // Actualizar reputación
+        await client.query(
+            `UPDATE users SET 
+             total_trades = total_trades + 1,
+             reputation = LEAST(5.00, reputation + 0.1)
+             WHERE id IN ($1, $2)`,
+            [order.seller_id, order.buyer_id]
+        );
+
+        await client.query(
+            `INSERT INTO messages (order_id, sender_id, sender_username, text, is_system)
+             VALUES ($1, $2, 'SISTEMA', '✅ Orden completada exitosamente. Fondos liberados.', true)`,
+            [order_id, user_id]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/cancelar-orden', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { order_id, user_id } = req.body;
+
+        const orderResult = await client.query("SELECT * FROM orders WHERE order_id = $1", [order_id]);
+        const order = orderResult.rows[0];
+
+        const userResult = await client.query("SELECT username FROM users WHERE id = $1", [user_id]);
+        const isAdmin = userResult.rows[0].username === 'admin';
+
+        if (order.seller_id !== user_id && order.buyer_id !== user_id && !isAdmin) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: "No autorizado" });
+        }
+
+        // Devolver fondos del escrow si existía
+        if (order.order_type === 'VENTA' && order.status === 'ABIERTA') {
+            await client.query(
+                "UPDATE users SET balance_usdt = balance_usdt + $1, balance_locked = balance_locked - $1 WHERE id = $2",
+                [order.amount_usdt, order.seller_id]
+            );
+
+            await client.query(
+                "UPDATE escrow SET status = 'RETURNED' WHERE order_id = $1",
+                [order_id]
+            );
+        }
+
+        await client.query(
+            "UPDATE orders SET status = 'CANCELADA' WHERE order_id = $1",
+            [order_id]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+// ==================== RUTAS DE CHAT ====================
+
+app.get('/api/mensajes/:order_id', async (req, res) => {
+    const result = await pool.query(
+        `SELECT * FROM messages WHERE order_id = $1 ORDER BY timestamp ASC`,
+        [req.params.order_id]
+    );
+    res.json(result.rows);
+});
+
+// ==================== RUTAS DE SOPORTE ====================
+
+app.post('/api/soporte/crear', async (req, res) => {
+    const { user_id, username } = req.body;
+    const result = await pool.query(
+        `INSERT INTO support_tickets (user_id, username) VALUES ($1, $2) RETURNING *`,
+        [user_id, username]
+    );
+    res.json({ success: true, ticket: result.rows[0] });
+});
+
+app.get('/api/soporte/tickets', async (req, res) => {
+    const result = await pool.query(
+        `SELECT * FROM support_tickets ORDER BY created_at DESC`
+    );
+    res.json(result.rows);
+});
+
+app.get('/api/soporte/mensajes/:ticket_id', async (req, res) => {
+    const result = await pool.query(
+        `SELECT * FROM support_messages WHERE ticket_id = $1 ORDER BY timestamp ASC`,
+        [req.params.ticket_id]
+    );
+    res.json(result.rows);
+});
+
+// ==================== RUTAS DE ADMINISTRADOR ====================
+
+app.get('/api/admin/usuarios', async (req, res) => {
+    const result = await pool.query(
+        `SELECT id, uuid, username, email, balance_usdt, balance_locked, 
+                reputation, total_trades, is_banned, country, created_at
+         FROM users ORDER BY created_at DESC`
+    );
+    res.json(result.rows);
+});
+
+app.post('/api/admin/ban-user', async (req, res) => {
+    const { user_id, banned } = req.body;
+    await pool.query(
+        "UPDATE users SET is_banned = $1 WHERE id = $2",
+        [banned, user_id]
+    );
     res.json({ success: true });
 });
 
-// --- 3. SOCKET.IO ---
+app.post('/api/admin/ajustar-saldo', async (req, res) => {
+    const { user_id, amount } = req.body;
+    await pool.query(
+        "UPDATE users SET balance_usdt = balance_usdt + $1 WHERE id = $2",
+        [amount, user_id]
+    );
+    res.json({ success: true });
+});
+
+app.post('/api/admin/ajustar-reputacion', async (req, res) => {
+    const { user_id, reputation } = req.body;
+    await pool.query(
+        "UPDATE users SET reputation = $1 WHERE id = $2",
+        [reputation, user_id]
+    );
+    res.json({ success: true });
+});
+
+app.get('/api/admin/ordenes', async (req, res) => {
+    const result = await pool.query(
+        `SELECT o.*, 
+                u1.username as seller_username,
+                u2.username as buyer_username
+         FROM orders o
+         LEFT JOIN users u1 ON o.seller_id = u1.id
+         LEFT JOIN users u2 ON o.buyer_id = u2.id
+         ORDER BY o.created_at DESC`
+    );
+    res.json(result.rows);
+});
+
+// ==================== SOCKET.IO ====================
+
 io.on('connection', (socket) => {
-    socket.on('unirse_p2p', (order_id) => { socket.join(order_id); });
+    console.log('🔌 Usuario conectado:', socket.id);
+
+    // Chat de órdenes P2P
+    socket.on('unirse_p2p', async (order_id) => {
+        socket.join(order_id);
+        
+        // Enviar historial de mensajes
+        const result = await pool.query(
+            `SELECT * FROM messages WHERE order_id = $1 ORDER BY timestamp ASC`,
+            [order_id]
+        );
+        socket.emit('historial_chat', result.rows);
+    });
+
     socket.on('msg_p2p', async (data) => {
         const { order_id, sender_id, username, text } = data;
-        await pool.query("INSERT INTO messages (order_id, sender_id, text) VALUES ($1,$2,$3)", [order_id, sender_id, text]);
-        io.to(order_id).emit('update_chat', { username, text });
+        
+        const result = await pool.query(
+            `INSERT INTO messages (order_id, sender_id, sender_username, text) 
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [order_id, sender_id, username, text]
+        );
+
+        io.to(order_id).emit('update_chat', result.rows[0]);
+    });
+
+    // Chat de soporte
+    socket.on('unirse_soporte', async (ticket_id) => {
+        socket.join(`support_${ticket_id}`);
+        
+        const result = await pool.query(
+            `SELECT * FROM support_messages WHERE ticket_id = $1 ORDER BY timestamp ASC`,
+            [ticket_id]
+        );
+        socket.emit('historial_soporte', result.rows);
+    });
+
+    socket.on('msg_soporte', async (data) => {
+        const { ticket_id, sender_id, username, text, is_admin } = data;
+        
+        const result = await pool.query(
+            `INSERT INTO support_messages (ticket_id, sender_id, sender_username, text, is_admin) 
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [ticket_id, sender_id, username, text, is_admin || false]
+        );
+
+        io.to(`support_${ticket_id}`).emit('update_soporte', result.rows[0]);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('❌ Usuario desconectado:', socket.id);
     });
 });
 
-// --- 4. INICIALIZACIÓN DB ---
-async function initDB() {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY, username TEXT UNIQUE, email TEXT UNIQUE, password_hash TEXT,
-                balance_usdt DECIMAL(18,2) DEFAULT 1000.00, kyc_status TEXT DEFAULT 'NO VERIFICADO'
-            );
-            CREATE TABLE IF NOT EXISTS orders (
-                order_id UUID DEFAULT gen_random_uuid() PRIMARY KEY, buyer_id INTEGER REFERENCES users(id),
-                seller_id INTEGER REFERENCES users(id), amount_usdt DECIMAL(18,2), price_ves DECIMAL(18,2),
-                bank TEXT, status TEXT DEFAULT 'ABIERTA'
-            );
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY, order_id UUID REFERENCES orders(order_id),
-                sender_id INTEGER REFERENCES users(id), text TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-    } catch (err) { console.error(err); }
-}
-initDB();
+// ==================== UTILIDADES ====================
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("🚀 Platinum Elite P2P Ready"));
+function sanitizeUser(user) {
+    const { password_hash, ...safeUser } = user;
+    return safeUser;
+}
+
+// ==================== SERVIDOR ====================
+
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+initDB().then(() => {
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+        console.log(`🚀 Platinum Elite P2P Server running on port ${PORT}`);
+        console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+});
